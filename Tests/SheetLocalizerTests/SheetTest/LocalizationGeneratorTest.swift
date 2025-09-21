@@ -13,7 +13,7 @@ struct LocalizationGeneratorTest {
     
     @Test
     func customInitialization() {
-        let config = LocalizationConfig(
+        let config = LocalizationConfig.custom(
             outputDirectory: "/tmp/test",
             enumName: "TestStrings",
             sourceDirectory: "/tmp/test",
@@ -33,7 +33,7 @@ struct LocalizationGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("localization.csv")
         try SharedTestData.localizationCSV.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = LocalizationConfig(
+        let config = LocalizationConfig.custom(
             outputDirectory: tempDir.path,
             enumName: "TestStrings",
             sourceDirectory: tempDir.path,
@@ -130,7 +130,7 @@ struct LocalizationGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("mixed_localization.csv")
         try csvWithMixedRows.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = LocalizationConfig(
+        let config = LocalizationConfig.custom(
             outputDirectory: tempDir.path,
             enumName: "FilteredStrings",
             sourceDirectory: tempDir.path,
@@ -162,7 +162,7 @@ struct LocalizationGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("catalog_test.csv")
         try SharedTestData.localizationCSV.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = LocalizationConfig(
+        let config = LocalizationConfig.custom(
             outputDirectory: tempDir.path,
             enumName: "CatalogTest",
             sourceDirectory: tempDir.path,
@@ -204,7 +204,7 @@ struct LocalizationGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("multilang.csv")
         try csvWithMultipleLanguages.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = LocalizationConfig(
+        let config = LocalizationConfig.custom(
             outputDirectory: tempDir.path,
             enumName: "MultiLang",
             sourceDirectory: tempDir.path,
@@ -246,7 +246,7 @@ struct LocalizationGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("templates.csv")
         try csvWithTemplates.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = LocalizationConfig(
+        let config = LocalizationConfig.custom(
             outputDirectory: tempDir.path,
             enumName: "Templates",
             sourceDirectory: tempDir.path,
@@ -287,7 +287,7 @@ struct LocalizationGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("special_chars.csv")
         try csvWithSpecialChars.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = LocalizationConfig(
+        let config = LocalizationConfig.custom(
             outputDirectory: tempDir.path,
             enumName: "SpecialChars",
             sourceDirectory: tempDir.path,
@@ -320,7 +320,7 @@ struct LocalizationGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("localization.csv")
         try SharedTestData.localizationCSV.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = LocalizationConfig(
+        let config = LocalizationConfig.custom(
             outputDirectory: nestedOutputDir.path,
             enumName: "NestedTest",
             sourceDirectory: nestedOutputDir.path,
@@ -354,7 +354,7 @@ struct LocalizationGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("localization.csv")
         try SharedTestData.localizationCSV.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = LocalizationConfig(
+        let config = LocalizationConfig.custom(
             outputDirectory: tempDir.path,
             enumName: "TuistTest",
             sourceDirectory: tempDir.path,
@@ -385,12 +385,14 @@ struct LocalizationGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("localization.csv")
         try SharedTestData.localizationCSV.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let configNoCleanup = LocalizationConfig(
+        let configNoCleanup = LocalizationConfig.custom(
             outputDirectory: tempDir.path,
             enumName: "NoCleanupTest",
             sourceDirectory: tempDir.path,
             csvFileName: "localization.csv",
-            cleanupTemporaryFiles: false
+            cleanupTemporaryFiles: false,
+            unifiedLocalizationDirectory: true,
+            useStringsCatalog: false
         )
         
         let generatorNoCleanup = LocalizationGenerator(config: configNoCleanup)
@@ -415,12 +417,14 @@ struct LocalizationGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("integration_test.csv")
         try SharedTestData.localizationCSV.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = LocalizationConfig(
+        let config = LocalizationConfig.custom(
             outputDirectory: tempDir.path,
             enumName: "IntegrationTest",
             sourceDirectory: tempDir.path,
             csvFileName: "integration_test.csv",
-            cleanupTemporaryFiles: false
+            cleanupTemporaryFiles: false,
+            unifiedLocalizationDirectory: true,
+            useStringsCatalog: false
         )
         
         let generator = LocalizationGenerator(config: config)

@@ -212,6 +212,20 @@ public struct XcodeIntegration: Sendable {
         )
     }
     
+    public static func addColorFiles(
+        projectPath: String,
+        colorsPath: String,
+        dynamicPath: String
+    ) async throws {
+        let colorFile = FileToAdd(path: colorsPath, fileType: .swift)
+        let dynamicFile = FileToAdd(path: dynamicPath, fileType: .swift)
+        
+        try await addFiles(
+            projectPath: projectPath,
+            files: [colorFile, dynamicFile]
+        )
+    }
+    
     public static func addFiles(
         projectPath: String,
         files: [FileToAdd]
@@ -319,22 +333,25 @@ public struct XcodeIntegration: Sendable {
 
 
     private static func findLocalizableStringsReference(in content: String, for path: String) async -> String? {
+        let escapedPath = NSRegularExpression.escapedPattern(for: path)
         let patterns = [
-            "([A-Fa-f0-9]{24}) /\\* Localizable\\.strings in [^\\*]+ \\*/ = \\{[^}]*path = \(NSRegularExpression.escapedPattern(for: path))",
-            "([A-Fa-f0-9]{32}) /\\* Localizable\\.strings in [^\\*]+ \\*/ = \\{[^}]*path = \(NSRegularExpression.escapedPattern(for: path))",
-            "([A-Fa-f0-9]{24}) /\\* Localizable\\.strings \\*/ = \\{[^}]*path = \(NSRegularExpression.escapedPattern(for: path))"
+            "([A-Fa-f0-9]{24}) /\\* Localizable\\.strings in [^\\*]{1,100} \\*/ = \\{[^}]{1,500}path = \(escapedPath)",
+            "([A-Fa-f0-9]{32}) /\\* Localizable\\.strings in [^\\*]{1,100} \\*/ = \\{[^}]{1,500}path = \(escapedPath)",
+            "([A-Fa-f0-9]{24}) /\\* Localizable\\.strings \\*/ = \\{[^}]{1,500}path = \(escapedPath)"
         ]
         
         for pattern in patterns {
             do {
-                let regex = try await cachedRegex(for: pattern)
-                if let match = regex.firstMatch(in: content, options: [], range: NSRange(content.startIndex..., in: content)),
+                let regex = try NSRegularExpression(pattern: pattern)
+                let range = NSRange(content.startIndex..., in: content)
+                let match = regex.firstMatch(in: content, options: [], range: range)
+                if let match = match,
                    match.numberOfRanges > 1,
                    let uuidRange = Range(match.range(at: 1), in: content) {
                     return String(content[uuidRange])
                 }
             } catch {
-                logger.error("Regex compilation failed for localization pattern: \(pattern)")
+                logger.error("Regex operation failed for localization pattern: \(error.localizedDescription)")
                 continue
             }
         }

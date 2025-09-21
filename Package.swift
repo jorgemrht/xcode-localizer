@@ -76,7 +76,7 @@ let package = Package(
             ],
             path: "Sources/SwiftSheetGenCLI",
             swiftSettings: [
-                .unsafeFlags(["-DSWIFTSHEETGEN_VERSION=\"\(versionString)\""])
+                .unsafeFlags(["-Xfrontend", "-D", "-Xfrontend", "SWIFTSHEETGEN_VERSION=\(versionString)"])
             ]
         ),
         

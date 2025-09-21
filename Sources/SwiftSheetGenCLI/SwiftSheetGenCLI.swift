@@ -9,7 +9,7 @@ public struct SwiftSheetGenCLI: AsyncParsableCommand {
     #if SWIFTSHEETGEN_VERSION
     private static let version = SWIFTSHEETGEN_VERSION
     #else
-    private static let version = "0.0.0-development"
+    private static let version = AppVersion.current
     #endif
     
     public static let configuration = CommandConfiguration(

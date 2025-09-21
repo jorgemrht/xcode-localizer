@@ -8,12 +8,17 @@ struct ColorGeneratorTest {
     @Test
     func defaultInitialization() {
         let generator = ColorGenerator()
+        
         #expect(type(of: generator) == ColorGenerator.self)
     }
     
     @Test
     func customInitialization() {
-        let config = ColorConfig(outputDirectory: "/tmp/test", cleanupTemporaryFiles: true)
+        let config = ColorConfig.custom(
+            outputDirectory: "/tmp/test",
+            csvFileName: "colors.csv",
+            cleanupTemporaryFiles: true
+        )
         let generator = ColorGenerator(config: config)
         #expect(type(of: generator) == ColorGenerator.self)
     }
@@ -26,7 +31,11 @@ struct ColorGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("colors.csv")
         try SharedTestData.colorsCSV.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = ColorConfig(outputDirectory: tempDir.path, cleanupTemporaryFiles: false)
+        let config = ColorConfig.custom(
+            outputDirectory: tempDir.path,
+            csvFileName: "colors.csv",
+            cleanupTemporaryFiles: false
+        )
         let generator = ColorGenerator(config: config)
         
         try await generator.generate(from: csvFile.path)
@@ -77,7 +86,11 @@ struct ColorGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("colors.csv")
         try SharedTestData.colorsCSV.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = ColorConfig(outputDirectory: outputDir.path, cleanupTemporaryFiles: false)
+        let config = ColorConfig.custom(
+            outputDirectory: outputDir.path,
+            csvFileName: "colors.csv",
+            cleanupTemporaryFiles: false
+        )
         let generator = ColorGenerator(config: config)
         
         try await generator.generate(from: csvFile.path)
@@ -94,7 +107,11 @@ struct ColorGeneratorTest {
         let csvFile = tempDir.appendingPathComponent("colors.csv")
         try SharedTestData.colorsCSV.write(to: csvFile, atomically: true, encoding: .utf8)
         
-        let config = ColorConfig(outputDirectory: tempDir.path, cleanupTemporaryFiles: cleanupEnabled)
+        let config = ColorConfig.custom(
+            outputDirectory: tempDir.path,
+            csvFileName: "colors.csv",
+            cleanupTemporaryFiles: cleanupEnabled
+        )
         let generator = ColorGenerator(config: config)
         
         try await generator.generate(from: csvFile.path)

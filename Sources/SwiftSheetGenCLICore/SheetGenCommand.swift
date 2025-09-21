@@ -16,7 +16,6 @@ public protocol SheetGenCommand: AsyncParsableCommand {
 
     func createConfiguration() throws -> ConfigType
     func createGenerator(config: ConfigType) -> GeneratorType
-    func logConfigurationDetailsIfVerbose(_ config: ConfigType) throws
     
     func executeCompleteWorkflow() async throws
     func downloadCSVDataFromGoogleSheets() async throws
@@ -24,18 +23,14 @@ public protocol SheetGenCommand: AsyncParsableCommand {
     func temporaryFileCleanupIfRequested() throws
 }
 
-// MARK: - SheetGenCommand Extension for Common Logic
 public extension SheetGenCommand {
     
-    var logPrivacy: LogPrivacyLevel {
-        LogPrivacyLevel(from: sharedOptions.logPrivacyLevel)
+    func getOutputDirectory() throws -> String {
+        let baseDir = sharedOptions.outputDir.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(baseDir)/\(commandSpecificDirectoryName)"
     }
     
-    var outputDirectory: String {
-        "\(sharedOptions.outputDir.trimmingCharacters(in: .whitespacesAndNewlines))/\(commandSpecificDirectoryName)"
-    }
-    
-    var temporaryCSVFilePath: String {
+    func getTemporaryCSVFilePath() throws -> String {
         "\(FileManager.default.currentDirectoryPath)/\(commandSpecificDirectoryName.lowercased())/generated_\(commandSpecificDirectoryName.lowercased()).csv"
     }
     
@@ -48,10 +43,10 @@ public extension SheetGenCommand {
         
         do {
             try await executeCompleteWorkflow()
+            let outputDir = try getOutputDirectory()
             logSuccessfulExecutionCompletion(
                 startTime: executionStartTime,
-                generatedFilesLocation: outputDirectory,
-                logPrivacyLevel: sharedOptions.logPrivacyLevel
+                generatedFilesLocation: outputDir
             )
         } catch {
             Self.logger.error("💥 \(commandName.capitalized) generation workflow failed: \(error.localizedDescription)")
@@ -64,12 +59,10 @@ public extension SheetGenCommand {
         let commandName = Self.configuration.commandName ?? ""
         
         // Step 1: Validate and prepare configuration
-        Self.logger.log("⚙️ Preparing \(commandName) configuration")
         let configuration = try createConfiguration()
-        try logConfigurationDetailsIfVerbose(configuration)
         
         // Step 2: Download CSV data from Google Sheets
-        Self.logger.logInfo("📥 Downloading CSV data from Google Sheets", value: sharedOptions.sheetsURL,  isPrivate: logPrivacy.isPrivate)
+        Self.logger.log("📥 Downloading CSV data from Google Sheets")
         try await downloadCSVDataFromGoogleSheets()
         
         // Step 3: Generate Swift files
@@ -77,53 +70,41 @@ public extension SheetGenCommand {
         try await generateSwiftFiles(using: configuration)
         
         // Step 4: Clean up temporary files if requested
-        Self.logger.log("🧹 Cleanup operations")
         try temporaryFileCleanupIfRequested()
     }
 
     func downloadCSVDataFromGoogleSheets() async throws {
-        Self.logger.debug("🌐 Initializing CSV downloader with default configuration")
         let csvDataDownloader = CSVDownloader()
         
-        Self.logger.log("✅ Google Sheets URL validation successful")
-        
-        let tempDirectory = (temporaryCSVFilePath as NSString).deletingLastPathComponent
+        let csvPath = try getTemporaryCSVFilePath()
+        let tempDirectory = (csvPath as NSString).deletingLastPathComponent
         try ensureOutputDirectoryExists(atPath: tempDirectory, logger: Self.logger)
 
         try await csvDataDownloader.download(
             from: sharedOptions.sheetsURL,
-            to: temporaryCSVFilePath
+            to: csvPath
         )
-        Self.logger.log("✅ CSV data downloaded successfully to: \(temporaryCSVFilePath)")
     }
 
     func generateSwiftFiles(using configuration: ConfigType) async throws {
-        let commandName = Self.configuration.commandName ?? ""
-        Self.logger.debug("🏗️ Initializing \(commandName) generator with configuration")
         let generator = createGenerator(config: configuration)
         
-        try await generator.generate(from: temporaryCSVFilePath)
-        Self.logger.log("✅ Swift \(commandName) files generated successfully")
+        let csvPath = try getTemporaryCSVFilePath()
+        try await generator.generate(from: csvPath)
+        Self.logger.log("✅ Files generated successfully")
     }
 
     func temporaryFileCleanupIfRequested() throws {
+        let csvPath = try getTemporaryCSVFilePath()
+        
         if sharedOptions.keepCSV {
-            Self.logger.logInfo("💾 Temporary CSV file preserved at:", value: temporaryCSVFilePath, isPrivate: logPrivacy.isPrivate)
-            Self.logger.debug("📄 You can review the CSV data for debugging purposes")
+            Self.logger.log("💾 CSV file preserved at: \(csvPath)")
             return
         }
         
         let fileManager = FileManager.default
-        
-        if fileManager.fileExists(atPath: temporaryCSVFilePath) {
-            do {
-                try fileManager.removeItem(atPath: temporaryCSVFilePath)
-                Self.logger.debug("🗑️ Temporary CSV file cleaned up successfully")
-            } catch {
-                Self.logger.logError("⚠️ Failed to clean up temporary CSV file:",  value: error.localizedDescription, isPrivate: logPrivacy.isPrivate)
-            }
-        } else {
-            Self.logger.debug("ℹ️ No temporary CSV file found to clean up")
+        if fileManager.fileExists(atPath: csvPath) {
+            try? fileManager.removeItem(atPath: csvPath)
         }
     }
 }
@@ -131,8 +112,7 @@ public extension SheetGenCommand {
 public extension SheetGenCommand {
     func validateAndLogGoogleSheetsURL() throws {
         guard validateGoogleSheetsURL(sharedOptions.sheetsURL) else {
-            Self.logger.logError("❌ Invalid Google Sheets URL:", value: sharedOptions.sheetsURL, isPrivate: logPrivacy.isPrivate)
-            throw SheetLocalizerError.invalidURL("Google Sheets URL is not valid")
+            throw SheetLocalizerError.invalidURL("Invalid Google Sheets URL: \(sharedOptions.sheetsURL)")
         }
     }
 }

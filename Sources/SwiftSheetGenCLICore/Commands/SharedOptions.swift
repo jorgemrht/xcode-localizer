@@ -7,14 +7,8 @@ public struct SharedOptions: ParsableArguments {
     @Option(name: .long, help: "📁 Target directory for generated files (default: current directory)")
     public var outputDir: String = "./"
 
-    @Flag(name: [.customShort("v"), .long], help: "📝 Enable detailed logging for debugging")
-    public var verbose: Bool = false
-
     @Flag(name: .long, help: "💾 Keep downloaded CSV file for debugging")
     public var keepCSV: Bool = false
-
-    @Option(name: .long, help: "Privacy level for log output: public (default) or private")
-    public var logPrivacyLevel: String = "public"
 
     public init() {}
 }

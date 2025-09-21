@@ -28,7 +28,7 @@ struct CommandsTest {
         let config = try command.createConfiguration()
         
         #expect(config.enumName == "L10n")
-        #expect(config.csvFileName == "generated_localizations.csv")
+        #expect(config.csvFileName == "localizables.csv")
         #expect(config.cleanupTemporaryFiles == true)
         #expect(config.outputDirectory.contains("Localizables"))
         #expect(config.unifiedLocalizationDirectory == true)
@@ -87,34 +87,7 @@ struct CommandsTest {
         #expect(String(describing: type(of: generator)) == "LocalizationGenerator")
     }
     
-    @Test
-    func localizationCommandVerboseLogging() throws {
-        let command = try LocalizationCommand.parse([
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vTest123/pubhtml",
-            "--output-dir", FileManager.default.temporaryDirectory.path,
-            "--verbose",
-            "--swift-enum-name", "TestEnum",
-            "--enum-separate-from-localizations"
-        ])
-        let config = try command.createConfiguration()
-        
-        #expect(throws: Never.self) {
-            try command.logConfigurationDetailsIfVerbose(config)
-        }
-    }
     
-    @Test
-    func localizationCommandNonVerboseModeHandling() throws {
-        let command = try LocalizationCommand.parse([
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vTest123/pubhtml",
-            "--output-dir", FileManager.default.temporaryDirectory.path
-        ])
-        let config = try command.createConfiguration()
-        
-        #expect(throws: Never.self) {
-            try command.logConfigurationDetailsIfVerbose(config)
-        }
-    }
     
     
     @Test
@@ -133,7 +106,7 @@ struct CommandsTest {
         ])
         let config = try command.createConfiguration()
         
-        #expect(config.csvFileName == "generated_colors.csv")
+        #expect(config.csvFileName == "colors.csv")
         #expect(config.cleanupTemporaryFiles == true)
         #expect(config.outputDirectory.contains("Colors"))
     }
@@ -158,40 +131,8 @@ struct CommandsTest {
         #expect(String(describing: type(of: generator)) == "ColorGenerator")
     }
     
-    @Test
-    func colorsCommandVerboseLogging() throws {
-        let command = try ColorsCommand.parse([
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vTest123/pubhtml",
-            "--output-dir", FileManager.default.temporaryDirectory.path,
-            "--verbose"
-        ])
-        let config = try command.createConfiguration()
-        
-        #expect(throws: Never.self) {
-            try command.logConfigurationDetailsIfVerbose(config)
-        }
-    }
     
     
-    @Test("Commands compute log privacy level correctly",
-          arguments: [
-              ("public", false),
-              ("private", true),
-              ("Public", false),
-              ("PRIVATE", true),
-              ("invalid", false)
-          ])
-    func commandsLogPrivacyLevelComputation(inputLevel: String, expectedIsPrivate: Bool) throws {
-        let command = try LocalizationCommand.parse([
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vTest123/pubhtml",
-            "--log-privacy-level", inputLevel
-        ])
-        
-        let logPrivacy = command.logPrivacy
-        
-        #expect(logPrivacy.isPrivate == expectedIsPrivate)
-        #expect(logPrivacy.isPublic != expectedIsPrivate)
-    }
     
     @Test
     func commandsOutputDirectoryComputation() throws {
@@ -237,7 +178,7 @@ struct CommandsTest {
         let complexArgs = [
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vTest123/pubhtml",
             "--output-dir", FileManager.default.temporaryDirectory.appendingPathComponent("complex_test").path,
-            "--verbose", "--keep-csv",
+            "--keep-csv",
             "--swift-enum-name", "ComplexEnum",
             "--enum-separate-from-localizations",
             "--use-strings-catalog"
@@ -376,18 +317,15 @@ struct CommandsTest {
     func commandsSuccessfulExecutionLogging() throws {
         let startTime = Date()
         let generatedLocation = "/test/output/generated"
-        let logPrivacyLevel = "public"
         
         let command = try LocalizationCommand.parse([
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vTest123/pubhtml",
-            "--log-privacy-level", logPrivacyLevel
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vTest123/pubhtml"
         ])
         
         #expect(throws: Never.self) {
             command.logSuccessfulExecutionCompletion(
                 startTime: startTime,
-                generatedFilesLocation: generatedLocation,
-                logPrivacyLevel: logPrivacyLevel
+                generatedFilesLocation: generatedLocation
             )
         }
     }
@@ -413,11 +351,9 @@ struct CommandsTest {
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vTest123456789012345678901234567890/pub?output=csv",
             "--output-dir", FileManager.default.temporaryDirectory.appendingPathComponent("very_long_path_with_many_nested_directories_and_special_characters_123").path,
             "--swift-enum-name", "VeryLongEnumNameWithSpecialCharactersAndNumbers123",
-            "--verbose",
             "--keep-csv",
             "--enum-separate-from-localizations",
             "--use-strings-catalog",
-            "--log-privacy-level", "private"
         ])
         
         let config = try maximalCommand.createConfiguration()
@@ -426,6 +362,5 @@ struct CommandsTest {
         #expect(config.cleanupTemporaryFiles == false)
         #expect(config.unifiedLocalizationDirectory == false)
         #expect(config.useStringsCatalog == true)
-        #expect(maximalCommand.logPrivacy.isPrivate == true)
     }
 }

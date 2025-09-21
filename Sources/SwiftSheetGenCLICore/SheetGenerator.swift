@@ -1,4 +1,5 @@
 import Foundation
+import SheetLocalizer
 
 public protocol SheetGenerator {
     associatedtype Config: SheetConfig

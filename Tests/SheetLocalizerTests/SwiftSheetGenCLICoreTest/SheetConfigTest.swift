@@ -35,7 +35,7 @@ struct SheetConfigTest {
         let config = ColorConfig.default
         
         #expect(config.outputDirectory == "Colors")
-        #expect(config.csvFileName == "generated_colors.csv")
+        #expect(config.csvFileName == "colors.csv")
         #expect(config.cleanupTemporaryFiles == true)
         
         let customConfig = ColorConfig.custom(
@@ -155,7 +155,7 @@ struct SheetConfigTest {
         #expect(locResult.2 == true)
         
         #expect(colorResult.0 == "Colors")
-        #expect(colorResult.1 == "generated_colors.csv")
+        #expect(colorResult.1 == "colors.csv")
         #expect(colorResult.2 == true)
     }
     
@@ -210,7 +210,7 @@ struct SheetConfigTest {
         #expect(locProperties.cleanup == true)
         
         #expect(colorProperties.directory == "Colors")
-        #expect(colorProperties.filename == "generated_colors.csv")
+        #expect(colorProperties.filename == "colors.csv")
         #expect(colorProperties.cleanup == true)
     }
     
@@ -373,7 +373,7 @@ struct SheetConfigTest {
                     #expect(locConfig.cleanupTemporaryFiles == true)
                     
                     #expect(colorConfig.outputDirectory == "Colors")
-                    #expect(colorConfig.csvFileName == "generated_colors.csv")
+                    #expect(colorConfig.csvFileName == "colors.csv")
                     #expect(colorConfig.cleanupTemporaryFiles == true)
                 }
             }

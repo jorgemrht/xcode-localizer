@@ -1,103 +1,33 @@
 import os.log
 import Foundation
 
-// MARK: - Centralized Logger Configuration
-
-public extension Logger {
+public enum LoggerCategory: String, CaseIterable, Sendable {
+    case general
+    case csv
+    case parser
+    case network
+    case fileSystem
+    case cli
+    case xcodeIntegration
+    case localizationGenerator
+    case colorGenerator
+    case urlTransformer
     
-    /// Using bundle identifier ensures unique subsystem identifier
-    private static let subsystem = "com.swiftsheetgen"
-    
-    // MARK: - Module-Specific Loggers with Optimized Categories
-    
-    /// CSV download and network operations
-    static let csvDownloader = Logger(subsystem: subsystem, category: "CSV.Download")
-    
-    /// CSV parsing and data processing
-    static let csvParser = Logger(subsystem: subsystem, category: "CSV.Parser")
-    
-    /// Google Sheets URL transformation
-    static let googleSheetURLTransformer = Logger(subsystem: subsystem, category: "GoogleSheets.URL")
-
-    /// Xcode project integration
-    static let xcodeIntegration = Logger(subsystem: subsystem, category: "Xcode.Integration")
-    
-    /// CLI command processing
-    static let cli = Logger(subsystem: subsystem, category: "CLI")
-    
-    /// File system operations
-    static let fileSystem = Logger(subsystem: subsystem, category: "FileSystem")
-    
-    /// Network operations and validation
-    static let network = Logger(subsystem: subsystem, category: "Network")
-    
-    /// Swift localization file generation
-    static let localizationGenerator = Logger(subsystem: subsystem, category: "Localization.Generator")
-    
-    /// Color generation operations
-    static let colorGenerator = Logger(subsystem: subsystem, category: "Color.Generator")
-    
+    public var logger: Logger {
+        Logger(subsystem: "com.swiftsheetgen", category: rawValue)
+    }
 }
 
-// MARK: - Privacy and Performance Extensions
-
 public extension Logger {
+    static let shared = LoggerCategory.general.logger
+    static let csvDownloader = LoggerCategory.csv.logger
+    static let csvParser = LoggerCategory.parser.logger
+    static let googleSheetURLTransformer = LoggerCategory.urlTransformer.logger
+    static let xcodeIntegration = LoggerCategory.xcodeIntegration.logger
+    static let cli = LoggerCategory.cli.logger
+    static let fileSystem = LoggerCategory.fileSystem.logger
+    static let network = LoggerCategory.network.logger
+    static let localizationGenerator = LoggerCategory.localizationGenerator.logger
+    static let colorGenerator = LoggerCategory.colorGenerator.logger
     
-    func logInfo(_ message: String, value: String, isPrivate: Bool = false) {
-        if isPrivate {
-            self.info("\(message) \(value, privacy: .private)")
-        } else {
-            self.info("\(message) \(value, privacy: .public)")
-        }
-    }
-    
-    func logError(_ message: String, value: String, isPrivate: Bool = false) {
-        if isPrivate {
-            self.error("\(message) \(value, privacy: .private)")
-        } else {
-            self.error("\(message) \(value, privacy: .public)")
-        }
-    }
-    
-    func logFatal(_ message: String, error: Error? = nil, isPrivate: Bool = false) -> Never {
-        if let error = error {
-            if isPrivate {
-                self.error("FATAL: \(message, privacy: .private) - \(error.localizedDescription, privacy: .private)")
-            } else {
-                self.error("FATAL: \(message, privacy: .public) - \(error.localizedDescription, privacy: .public)")
-            }
-        } else {
-            if isPrivate {
-                self.error("FATAL: \(message, privacy: .private)")
-            } else {
-                self.error("FATAL: \(message, privacy: .public)")
-            }
-        }
-        exit(EXIT_FAILURE)
-    }
-    
-    func logNetworkRequest(url: String, method: String, statusCode: Int, isPrivate: Bool = false) {
-        if isPrivate {
-            self.info("Network Request: \(method, privacy: .private) \(url, privacy: .private) -> \(statusCode, privacy: .private)")
-        } else {
-            self.info("Network Request: \(method, privacy: .public) \(url, privacy: .public) -> \(statusCode, privacy: .public)")
-        }
-    }
-
-    func logFileOperation(_ operation: String, path: String, size: Int64? = nil, isPrivate: Bool = false) {
-        let sizeString = size.map { " [\(ByteCountFormatter.string(fromByteCount: $0, countStyle: .file))]" } ?? ""
-        if isPrivate {
-            self.info("File Operation: \(operation, privacy: .private) \(path, privacy: .private)\(sizeString, privacy: .private)")
-        } else {
-            self.info("File Operation: \(operation, privacy: .public) \(path, privacy: .public)\(sizeString, privacy: .public)")
-        }
-    }
-
-    func logCSVProcessing(rowCount: Int, columnCount: Int, processingTime: TimeInterval, isPrivate: Bool = false) {
-        if isPrivate {
-            self.info("CSV Processing: \(rowCount, privacy: .private) rows, \(columnCount, privacy: .private) columns in \(processingTime, format: .fixed(precision: 3), privacy: .private)s")
-        } else {
-            self.info("CSV Processing: \(rowCount, privacy: .public) rows, \(columnCount, privacy: .public) columns in \(processingTime, format: .fixed(precision: 3), privacy: .public)s")
-        }
-    }
 }
