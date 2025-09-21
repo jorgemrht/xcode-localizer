@@ -15,150 +15,245 @@
 
 ---
 
-**SwiftSheetGen** is a command-line tool that transforms your team's collaborative Google Sheets for strings and colors into compile-time safe Swift code, eliminating manual errors and keeping your Xcode project in perfect sync.
+**SwiftSheetGen** is a command-line tool that turns your team’s Google Sheets for  **localizable strings**  and  **design system colors**  into  **compile-time–safe Swift APIs**, removing typos and keeping your Xcode project in sync—no manual file dragging, no missing resources.
 
 ## Overview
 
-Manually managing localizable strings and design system colors is tedious and error-prone. A typo in a key, a color hex copied incorrectly, or a file not added to the Xcode project can lead to runtime crashes and UI inconsistencies.
+Managing strings and color tokens by hand is slow and error-prone: a mistyped key, a bad hex value, or a file not added to the project can cause crashes and UI inconsistencies.
 
-SwiftSheetGen solves this by using a **Google Sheet as a single source of truth**. This allows designers, translators, and developers to collaborate in one place, while the tool automates the generation of type-safe Swift code that you can use with confidence.
+SwiftSheetGen makes your  **Google Sheet the single source of truth**. Designers, translators, and developers collaborate in one place, and the tool  **generates typed Swift**:
 
-## Getting started
+-  **Strings**  → a strongly-typed API (e.g.,  `L10n.auth.loginTitle`) backed by localized resources, so invalid keys fail at  **compile time**.
+    
+- **Colors**  → a  `Color`  extension with static properties (e.g.,  `Color.brand.primary`) that prevents name/typo issues.
+    
+This automation keeps your project  **continuously synchronized**  with the sheet and reduces runtime surprises, while aligning with modern Apple patterns for localization (`String(localized:)` / String Catalogs) and SwiftUI color usage in Xcode projects.
 
-The easiest way to get started is to use the SwiftSheetGen command-line tool included with this package:
+# Getting started
 
-1. Add the tap (a repository of formulas): **brew tap jorgemrht/swiftSheetGen**
+## Install
 
-2. Install the tool: **brew install swiftsheetgen**
+You can install SwiftSheetGen in one of two ways:
+
+### Option A — Homebrew (recommended)
+
+```bash
+brew tap jorgemrht/swiftsheetgen
+brew install swiftsheetgen
+```
 
 ### Updating
+
 To update to the latest version, simply run the upgrade command:
+
 ```bash
 brew upgrade swiftsheetgen
 ```
 
-### From Source
-Build the tool from the source and move it to a location in your `PATH`.
+### Option B — Build from source
+
+
 ```bash
 git clone https://github.com/jorgemrht/SwiftSheetGen.git
 cd SwiftSheetGen
 swift build -c release
-sudo cp .build/release/swiftsheetgen /usr/local/bin/
+install -m 755 .build/release/swiftsheetgen /usr/local/bin/swiftsheetgen
 ```
+
+> Tip (Apple Silicon): Homebrew usually lives in /opt/homebrew. Adjust paths if needed.
+
+## Supported Google Sheets URLs (required)
+
+SwiftSheetGen accepts only Google Sheets that are **published to the web** and match one of these patterns (note the `/d/e/...` segment):
+
+### Published HTML
+https://docs.google.com/spreadsheets/d/e/<DOC_ID>/pubhtml
+
+### Published CSV
+https://docs.google.com/spreadsheets/d/e/<DOC_ID>/pub?output=csv
+
+**Normalization**  
+- `/pubhtml` is automatically transformed to `/pub?output=csv`.  
+- Any other URL (e.g., `/edit`, `export?format=csv`, links with `gid=`) is rejected.
+
+### How URLs are validated & normalized
+
+Internally, URLs are:
+
+- **Trimmed**  of whitespace.
+- **Validated**  against these two regexes:
+  -   `^https://docs\.google\.com/spreadsheets/d/e/[a-zA-Z0-9_.-]+/pubhtml$`      
+  -   `^https://docs\.google\.com/spreadsheets/d/e/[a-zA-Z0-9_.-]+/pub\?output=csv$`
+        
+- **Transformed**  with this rule:
+  - If the URL ends with  `/pubhtml`, it is  **converted**  to  `/pub?output=csv`
+  - If it already ends with  `/pub?output=csv`, it’s used as-is
+  - Anything else is rejected with  `invalidGoogleSheetsURL`
+        
+### Examples
+
+-  ✅ Valid (HTML, will be auto-converted to CSV): `https://docs.google.com/spreadsheets/d/e/ABCD1234/pubhtml`  
+-  ✅ Valid (already CSV): `https://docs.google.com/spreadsheets/d/e/ABCD1234/pub?output=csv` 
+-  ❌ Invalid (not published; missing  `/d/e/…`  form): `https://docs.google.com/spreadsheets/d/ABCD1234/edit` 
+    
+> Privacy note: “Publish to the web” exposes a read-only version. Do not publish sensitive data.
 
 ## Quick Start
 
+1. **Publish your Google Sheet to the web**  and copy a URL in one of the supported formats (see above). 
+2. **Run the generator**
+    
+```bash
+# Localizations
+swiftsheetgen localization "https://docs.google.com/spreadsheets/d/e/ABCD1234/pubhtml"
+# or (equivalent after normalization)
+swiftsheetgen localization "https://docs.google.com/spreadsheets/d/e/ABCD1234/pub?output=csv"
 
-1.  **Get your Google Sheet URL.** The sheet must be public. Here is a valid URL:
-    -   Published to web URL: `https://docs.google.com/spreadsheets/d/e/1a2b3c4d5e6f7g8h9i0j.../pubhtml`
+# Colors
+swiftsheetgen colors "https://docs.google.com/spreadsheets/d/e/WXYZ9876/pubhtml"
+# or
+swiftsheetgen colors "https://docs.google.com/spreadsheets/d/e/WXYZ9876/pub?output=csv"
+```
 
-3.  **Run the command:**
-    ```bash
-    # For localizations
-    swiftsheetgen localization "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/export?format=csv"
-     ```
-     
-    ```bash
-    # For colors
-    swiftsheetgen colors "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/export?format=csv&gid=YOUR_GID"
-    ```
+3) **Open the generated files in Xcode**
 
-    This will generate the necessary files in a new subdirectory (`./Localizables` or `./Colors`). That's it!
+```bash
+./Localizables/
+  en.lproj/Localizable.strings
+  es.lproj/Localizable.strings
+  ...
+  L10n.swift                # strongly-typed API (enum)
+
+./Colors/
+  Colors.swift              # color tokens (static API)
+  Color+Dynamic.swift       # helpers for dynamic variants
+```
+
+If automatic Xcode integration doesn’t occur, drag these paths into the desired target.
+
+## Input quality & helpful rules (used by the tool)
+
+- **Localization keys**
+  - Must not be empty, start/end with spaces, contain quotes  `"`  or newlines.
+  - If a key is invalid, the tool produces an error explaining  **why**  (e.g., “Key starts with a space”).    
+- **CSV escaping**
+  - Values containing quotes, commas, or newlines are automatically  **CSV-escaped**.
+  - Arrays of strings are joined with commas into a single CSV row when needed.     
+- **File system safety**
+  - Output directories are created if missing and validated to avoid collisions with non-directory paths.
+      
+These rules keep outputs predictable and safe for CI/CD and for reproducible builds.
+
+### Xcode integration
+
+-   **Xcode 26 (recommended):**  SwiftSheetGen  **automatically adds**  the generated files to your Xcode project/targets the first time you run the tool in the project directory (and on subsequent runs it keeps them up to date).
+    
+-   **Xcode 15 and earlier:**  the  **first time**  you run the tool you’ll need to  **manually add**  the generated folders to your target(s). Subsequent runs will update the existing files in place.
+
+> The tool scans the current directory and up to several parent directories to find a `.xcodeproj`. If you run it from elsewhere, pass `--output-dir /path/to/YourApp`.
+
+# Detailed Usage Guide
 
 
-## Detailed Usage Guide
+SwiftSheetGen exposes  **two subcommands**:
 
-### Commands
+### `localization`
 
-SwiftSheetGen has two main commands:
+**Usage**
 
--   `localization`: Generates `.strings` files for each language and a type-safe `L10n` enum to access them.
--   `colors`: Generates a `Color` extension with static properties for your design system colors.
+`swiftsheetgen localization <PUBLISHED_SHEET_URL> [options]` 
 
-### Shared Options
+**Positional argument (required)**
 
-These options are available for both the `localization` and `colors` commands:
+-   `<PUBLISHED_SHEET_URL>`  — a published Google Sheets URL (`/d/e/.../pubhtml`  or  `/pub?output=csv`, automatically normalized to CSV).
+    
 
-| Option | Shorthand | Description | Default |
-|---|---|---|---|
-| `--output-dir` | | The directory where generated files will be saved. For Xcode integration, this must be the directory containing your `.xcodeproj` file. | `./` |
-| `--verbose` | `-v` | Enable detailed logging for debugging. | `false` |
-| `--keep-csv` | | Keep the downloaded CSV file for debugging purposes. | `false` |
-| `--log-privacy-level` | | Set log privacy to `public` or `private`. | `public` |
+**Localization-specific options**
 
-### `localization` Specific Options
+- `--swift-enum-name <Name>`  — name of the generated Swift enum.  **Default:**  `L10n`.
+- `--enum-separate-from-localizations`  — write the enum file in the base  `--output-dir`  instead of inside  `Localizables/`.  **Default:** `false`. 
+- `--use-strings-catalog`  — generate a  **`Localizable.xcstrings`**  catalog instead of `.strings`  files.  **Default:** `false`. 
+    
 
-| Option | Description | Default |
-|---|---|---|
-| `--swift-enum-name` | Name for the generated Swift localization enum. | `L10n` |
-| `--enum-separate-from-localizations` | Generate the Swift enum file in the base output directory instead of inside the `Localizables` subdirectory. | `false` |
+**Outputs**
 
-## Integrations
+- One `.strings` file per language in `Localizables/<lang>.lproj/Localizable.strings`, **or** a single `Localizable.xcstrings` catalog if `--use-strings-catalog` is used.
+- A strongly typed Swift enum (`L10n.swift`  by default, or the name you pass).
+  
+### `colors`
 
-### Xcode
-The tool automatically integrates the generated files into your Xcode project, adding them to the Project Navigator and the correct build phases.
+**Usage**
 
-- **Project Compatibility:** Automatic integration is only supported for projects created or last saved with **Xcode 15 or newer**. The tool modifies the `.pbxproj` file, and its structure changes between major Xcode versions.
-- **Older Projects (Xcode 14 and below):** If your project was created with an older version of Xcode, the automatic integration will be skipped to avoid corrupting the project file. In this case, you must **drag and drop the generated files manually from Finder** into your Xcode Project Navigator for the initial setup.
+`swiftsheetgen colors <PUBLISHED_SHEET_URL> [options]` 
 
-#### How Automatic Integration Works
-For the tool to find your project file (`.xcodeproj`), it automatically searches the current directory and up to two parent directories. This makes integration seamless in most cases.
+**Positional argument (required)**
 
-*   **Running from the project root or a subdirectory:**
-    If your terminal's current location is inside your project's folder structure, the tool will find the `.xcodeproj` automatically.
+- `<PUBLISHED_SHEET_URL>` — a published Google Sheets URL (`/d/e/.../pubhtml`  or  `/pub?output=csv`)
+  
+**Color-specific options**
 
-    ```bash
-    # If your project is at /path/to/YourApp, you can run the command from:
-    # /path/to/YourApp
-    # /path/to/YourApp/Subfolder
-    # /path/to/YourApp/Subfolder/AnotherSubfolder
+-  None — this command only uses the shared options
+    
+**Outputs**
 
-    swiftsheetgen localization "..."
-    ```
+- `Colors/Colors.swift` and `Colors/Color+Dynamic.swift`.
+    
+### Shared options (for both subcommands)
 
-*   **Using the `--output-dir` option:**
-    The `--output-dir` flag is optional and serves two purposes:
-    1.  It specifies where the generated files should be saved.
-    2.  It acts as the starting point for the Xcode project search.
+- `--output-dir <path>` - base output directory (**default:**  `./`)
+- `-v, --verbose` - enable verbose logging
+- `--keep-csv` - keep the downloaded CSV instead of cleaning it up
+    
+> Internally, each subcommand writes into a fixed subfolder of the base output directory:  
+> `localization`  →  `<output-dir>/Localizables`  
+> `colors`  →  `<output-dir>/Colors`
 
-    You only need this if you run the command from a location outside your project's folder or if you want to save the generated files in a very specific place.
+## Tuist
 
-    ```bash
-    # Run from anywhere by telling the tool where your project is
-    swiftsheetgen localization "..." --output-dir /path/to/YourApp
-    ```
-
-### Tuist
 If a `Project.swift` or `Workspace.swift` file is detected in your project's root, SwiftSheetGen will skip the automatic Xcode integration and print instructions for you to add the generated files to your Tuist manifest.
 
 ## Google Sheet Setup
 
-Your Google Sheet must be **publicly accessible** ("Anyone with the link can view") and have a specific structure.
+Your sheet must be **published to the web** and follow these structures.
 
-#### For Localizations
-The sheet requires columns for `key`, `comment`, and each language code (e.g., `en`, `es`).
+### Localizations sheet
 
-| key | comment | en | es |
+Header row (exact labels):
+[View] | [Item] | [Type] | <language codes…>
+
+- `"[View]"`, `"[Item]"`, `"[Type]"` are **required** headers.
+- After `[Type]`, add one column per language: `es`, `en`, `fr`, …
+- First column can contain markers:
+  - `[COMMENT]` → row is ignored
+  - `[END]` → parsing stops
+
+**Example (compact)**
+| [View] | [Item] | [Type] | es | en |
+|---|---|---|---|---|
+| common | app_name | text | Mi App | My App |
+| login | title | text | Iniciar sesión | Sign in |
+| [END] |  |  |  |  |
+
+> Keys are derived from `view_item_type`. Keys must not have leading/trailing spaces, quotes `"` or newlines.
+
+### Colors sheet
+
+Header row (exact labels):
+[Color Name] | [Any Hex Value] | [Light Hex Value] | [Dark Hex Value]
+
+- First column can contain `[COMMENT]` (ignored) or `[END]` (stop).
+
+**Example (compact)**
+| [Color Name] | [Any Hex Value] | [Light Hex Value] | [Dark Hex Value] |
 |---|---|---|---|
-| `login.title` | Title on the login screen | Welcome! | ¡Bienvenido! |
-| `login.button.signIn` | Sign in button text | Sign In | Iniciar Sesión |
-
-#### For Colors
-The sheet requires columns for `name`, `anyHex`, `lightHex`, and `darkHex`.
-
-| name | anyHex | lightHex | darkHex |
-|---|---|---|---|
-| `primary` | | `#68478E` | `#866CA5` |
-| `onPrimary` | | `#FFFFFF` | `#00172E` |
-| `background` | `#F2F2F7` | | |
+| primaryBackgroundColor | #FFFFFF | #FFFFFF | #FFFFFF |
+| onPrimary | #FFFFFF | #FFFFFF | #00172E |
+| [END] |  |  |  |
 
 ## FAQ
 
-**Q: How do I use a private Google Sheet?**
-**A:** SwiftSheetGen requires the sheet to be publicly accessible to download the CSV data. You can achieve this by going to "File" > "Share" > "Publish to web" in Google Sheets and publishing it as a CSV document. This creates a public URL without making the sheet itself public.
-
-**Q: Will you support the new Xcode Strings Catalog (`.xcstrings`)?**
-**A:** Yes, support for the modern Xcode Strings Catalog is planned for a future release. This will allow for richer localization features and even better integration with Xcode.
+**Q: Can I use a private Google Sheet?**  
+**A:** No. SwiftSheetGen requires a **published** URL (`/pubhtml` or `/pub?output=csv`). “Publish to the web” exposes a **public, read-only** link. Do **not** publish sensitive data. For private workflows, export the CSV in CI to a secure location and feed that URL to the tool.
 
 **Q: Can I customize the generated Swift code?**
 **A:** For localizations, you can use the `--swift-enum-name` option to change the name of the generated enum. Other customizations are not available at this time but may be considered for future versions.
