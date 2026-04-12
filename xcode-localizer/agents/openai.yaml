@@ -1,0 +1,7 @@
+interface:
+  display_name: "Xcode Localizer"
+  short_description: "Translations only, no UI edits"
+  default_prompt: "Use $xcode-localizer to translate only in Translations/Localizable.xcstrings, Translations/AppStrings.swift, and Translations/reports/*.html; do not read or modify screens, Swift UI, or project files."
+
+policy:
+  allow_implicit_invocation: true
