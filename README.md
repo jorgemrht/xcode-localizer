@@ -318,5 +318,3 @@ Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
 ## License
 
 MIT. See [LICENSE](LICENSE) for details.
-
-By [Jorgemrht](https://github.com/jorgemrht). Inspired by the [Swift Agent Skills](https://github.com/twostraws/swift-agent-skills) community.
