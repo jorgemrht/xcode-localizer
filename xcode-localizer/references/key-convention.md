@@ -21,12 +21,25 @@ Settings notifications -> settings_notifications
 ```text
 button
 text
+label
 title
 subtitle
 placeholder
 error
+success
+warning
 alert
+message
+navigation_title
+toolbar
+tab
+toggle
+link
+picker
+context_menu
+empty_state
 accessibility_label
+accessibility_hint
 ```
 
 `meaning` is semantic English, not a literal UI type. Prefer verbs for actions and nouns for labels:
@@ -69,13 +82,18 @@ When in doubt, use the best semantic key from the user request. Do not inspect a
 Element mapping:
 
 ```text
-label -> text
+label -> label
 button -> button
 TextField placeholder -> placeholder
 SecureField placeholder -> placeholder
 error message -> error
+success message -> success
 screen title -> title
+NavigationStack title -> navigation_title
+ToolbarItem text -> toolbar
+Tab label -> tab
 accessibility text -> accessibility_label
+accessibility hint -> accessibility_hint
 ```
 
 For the natural-language request "in the Login screen, the username label is username in English and usuario in Spanish, and the login button is login in English and iniciar sesion in Spanish", use:

@@ -1,0 +1,37 @@
+name: Validate Skill
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Validate Agent Skill format
+        run: npx skills-ref validate xcode-localizer/
+
+      - name: Check Python script syntax
+        run: python3 -m py_compile xcode-localizer/scripts/apply_xcstrings_changes.py
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run tests
+        run: pytest tests/ -v

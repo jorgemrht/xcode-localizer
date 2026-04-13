@@ -1,0 +1,8 @@
+interface:
+  display_name: "Xcode Localizer"
+  short_description: "Xcode 26 String Catalog localization — no UI edits"
+  brand_color: "#F05138"
+  default_prompt: "Use the xcode-localizer skill to add or update localization keys in Translations/Localizable.xcstrings, Translations/AppStrings.swift, Translations/xcode-localizer.config.json, and Translations/reports/*.html. Do not read or modify app source, SwiftUI views, or Xcode project files."
+
+policy:
+  allow_implicit_invocation: true

@@ -7,6 +7,7 @@ It may persist only:
 ```text
 Translations/Localizable.xcstrings
 Translations/AppStrings.swift
+Translations/xcode-localizer.config.json
 Translations/reports/*.html
 ```
 
@@ -20,8 +21,26 @@ Every localization change must also write:
 
 ```text
 Translations/reports/latest.html
-Translations/reports/<timestamp>-l10n.html
+Translations/reports/historyofchanges.html
+Translations/reports/<dd-mm-yyyy-HHMMSS>-xcode-localizer.html
 ```
+
+`latest.html` shows the full current catalog and uses the title `Xcode Localizer - Current localizations`. It shows `Last time generated: <dd-mm-yyyy hh:mm:ss>` under the page title. It includes views for all keys, key pattern groups, screen groups, element groups, and key descriptions. The `Go To Key descriptions` button and the full ungrouped Key descriptions section are visible only in the All keys view. Key descriptions are also shown inside each key pattern, screen, and element group. Change reports use the title `Xcode Localizer Report`. `historyofchanges.html` shows change reports from most recent to oldest, shows `Last time generated: <dd-mm-yyyy hh:mm:ss>` under the page title, and renders one table with `date` and `author` columns plus a right-aligned review button column with no header text. Display dates as `dd-mm-yyyy hh:mm:ss`, not filenames. It includes two filters next to `Current localizations`: a calendar date input and an author text input. If no rows match, hide the table and show centered text: `No localization text was generated for that date or author.` Current report tables use language columns and a final `author` column. Change report tables use language old/new column pairs such as `en old`, `en`, `es old`, `es`, followed by `author`, so updated rows show the previous value and the new value side by side. HTML tables must not include a `warnings` column. The author value comes from `GIT_AUTHOR_NAME`, `git config user.name`, the last commit author, or `Unknown`.
+
+Default settings are:
+
+```json
+{
+  "defaultLanguage": "en",
+  "languages": ["en", "es"],
+  "defaultScreen": "common",
+  "validElements": ["accessibility_hint", "accessibility_label", "alert", "button", "context_menu", "empty_state", "error", "label", "link", "message", "navigation_title", "picker", "placeholder", "subtitle", "success", "tab", "text", "title", "toggle", "toolbar", "warning"],
+  "keyPattern": "{screen}_{element}_{meaning}",
+  "swiftApiName": "AppStrings"
+}
+```
+
+The skill creates `Translations/xcode-localizer.config.json` when missing and reads it on each localization change. If the user wants different languages or elements, modify that file directly only when explicitly requested.
 
 Minimum catalog entry:
 
@@ -35,12 +54,14 @@ Minimum catalog entry:
       "extractionState": "manual",
       "localizations": {
         "en": {
+          "comment": "Login sign-in button.",
           "stringUnit": {
             "state": "translated",
             "value": "Sign in"
           }
         },
         "es": {
+          "comment": "Boton de inicio de sesion en login.",
           "stringUnit": {
             "state": "translated",
             "value": "Iniciar sesion"
@@ -51,6 +72,8 @@ Minimum catalog entry:
   }
 }
 ```
+
+When creating a new key, include translations and concise comments for every configured language and every language already present in the catalog.
 
 Validate with:
 
