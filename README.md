@@ -4,12 +4,11 @@
   <img src="https://img.shields.io/badge/Xcode-26+-147EFB.svg?logo=xcode&logoColor=white" alt="Requires Xcode 26 and later." />
   <img src="https://img.shields.io/badge/swift-6+-8e44ad.svg" alt="Requires Swift 6 and later." />
   <img src="https://img.shields.io/badge/iOS-16+-2980b9.svg" alt="Designed for iOS 16 and later." />
-  <img src="https://github.com/jorgemrht/xcode-localizer/actions/workflows/validate-skill.yml/badge.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License MIT">
+  <img src="https://img.shields.io/badge/Agent%20Skills-compatible-F05138" alt="Agent Skills">
   <a href="https://twitter.com/jorgemrht">
     <img src="https://img.shields.io/badge/Contact-@jorgemrht-95a5a6.svg?style=flat" alt="Twitter: @jorgemrht" />
   </a>
-  <img src="https://img.shields.io/badge/Agent%20Skills-compatible-F05138" alt="Agent Skills">
+  <img src="https://github.com/jorgemrht/SwiftSheetGen/actions/workflows/validate-skill.yml/badge.svg" alt="Tests">
 </p>
 
 An [Agent Skill](https://agentskills.io) that creates and updates Xcode 26 String Catalog localization artifacts — and nothing else. No UI edits, no project file changes, no source modifications.
