@@ -1,4 +1,4 @@
-<h1 align="center">Xcode Localizer Agent Skill for AI Coding Assistants</h1>
+<h1 align="center">Xcode Localizer</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Xcode-26+-147EFB.svg?logo=xcode&logoColor=white" alt="Requires Xcode 26 and later." />
@@ -8,279 +8,115 @@
   <a href="https://twitter.com/jorgemrht">
     <img src="https://img.shields.io/badge/Contact-@jorgemrht-95a5a6.svg?style=flat" alt="Twitter: @jorgemrht" />
   </a>
-  <img src="https://github.com/jorgemrht/SwiftSheetGen/actions/workflows/validate-skill.yml/badge.svg" alt="Tests">
+  <img src="https://github.com/jorgemrht/xcode-localizer/actions/workflows/validate-skill.yml/badge.svg" alt="Tests">
 </p>
 
-An [Agent Skill](https://agentskills.io) that creates and updates Xcode 26 String Catalog localization artifacts — and nothing else. No UI edits, no project file changes, no source modifications.
+Xcode 26 String Catalog localization for AI coding tools — because agents touch UI when asked for copy. This skill isolates localization work to `Translations/`, enforces consistent keys, generates a typed Swift API, and produces reviewable HTML change reports.
 
-Works with Claude Code, Codex, Gemini CLI, GitHub Copilot, Qwen, Cursor, and any tool that supports the Agent Skills format.
+Supports the Agent Skills open format.
 
-Find more agent skills for Swift and Apple platform development at [Swift Agent Skills](https://github.com/twostraws/swift-agent-skills).
+## Requirements
+Python 3.14+ is required. On macOS, install it with [Homebrew](https://brew.sh):
 
-## Who this is for
+```bash
+brew install python@3.14
+```
 
-- **iOS / macOS developers** who want an agent to manage `Localizable.xcstrings` without touching UI code.
-- **Teams adding new languages** who need every new key covered in all configured languages before it lands.
-- **Projects migrating from `.strings` / `.stringsdict`** to the Xcode 26 String Catalog format.
-- **Privacy-conscious developers** who want translations to stay on-device using a local LLM (see [Using local LLMs on macOS](#using-local-llms-on-macos)).
+## Features
+* **Scope isolation** — never touches app source, SwiftUI views, or Xcode project files. Only `Translations/`.
+* **Consistent keys** — enforces `{screen}_{element}_{meaning}` convention. No arbitrary keys like `btn_1`.
+* **Typed Swift API** — generates `AppStrings.swift` with `LocalizedStringResource`, not `NSLocalizedString`.
+* **All-language coverage** — new keys require translations for every configured language before writing.
+* **Placeholder validation** — catches mismatched `%@` or `%d` between languages.
+* **HTML change reports** — timestamped diffs with old/new values side by side. `latest.html` is always current source-of-truth.
+* **Persistent config** — languages, elements, and settings saved in `xcode-localizer.config.json`.
 
-## Install
-
+## Quick Start
 ```bash
 npx skills add https://github.com/jorgemrht/xcode-localizer --skill xcode-localizer
 ```
 
-No Node? Install it first:
+Then ask your agent:
+> Use xcode-localizer to add the login button in English and Spanish.
 
-```bash
-brew install node
-```
+Or clone this repository and drop `xcode-localizer/` into your tool's skills directory.
 
-## Usage
-
-### Claude Code
-
-```
-/xcode-localizer Add the login screen username placeholder in English and Spanish.
-```
-
-### Codex / ChatGPT
-
-```
-$xcode-localizer Add the login button. English: Log in. Spanish: Entrar.
-```
-
-### Gemini CLI
-
-```
-@xcode-localizer Add the settings title in English, Spanish, and French.
-```
-
-### GitHub Copilot
-
-```
-#xcode-localizer Add the profile screen error message for invalid email.
-```
-
-### Natural language (any tool)
-
-```
-Use the xcode-localizer skill to add the onboarding screen title in English and German.
-```
-
-### Manual install
-
-```bash
-cp -R xcode-localizer /path/to/your/agent/skills/xcode-localizer
-```
-
-Place the folder where your tool reads skills. For Codex: `$CODEX_HOME/skills/`; for Claude Code: the skills directory in your project or user config; for Cursor, Gemini CLI, and others, follow their official documentation.
-
-## What it covers
-
-| # | Feature | What it prevents |
-|---|---------|------------------|
-| 1 | Strict `Translations/` scope | Agent editing SwiftUI views or `.xcodeproj` files |
-| 2 | Stable `{screen}_{element}_{meaning}` keys | Arbitrary keys like `btn_1` or `screen_login_label` |
-| 3 | Xcode 26 String Catalog format | Legacy `.strings`, `.stringsdict`, or `.xcloc` output |
-| 4 | Typed `AppStrings.swift` wrapper | `NSLocalizedString` calls scattered across the codebase |
-| 5 | All-language coverage on new keys | Partial catalogs with missing translations |
-| 6 | Placeholder consistency check | Mismatched `%@` or `%d` between languages |
-| 7 | HTML change reports with old/new values | Silent overwrites with no review trail |
-| 8 | `historyofchanges.html` day-grouped index | Lost history of what changed and when |
-| 9 | `xcode-localizer.config.json` persistence | Settings re-entered on every invocation |
-| 10 | Git author attribution | Unknown authorship in change reports |
-
-## What makes this skill different
-
-**Scope isolation.** The skill hard-codes a check before every action: is the request about `Translations/`? If the user asks for localized text, the agent must not open a single Swift, Storyboard, or Xcode project file. This targets the most common agent mistake: touching UI when asked for copy.
-
-**Xcode 26 only.** No compatibility shims for older Xcode versions. The skill generates `sourceLanguage`/`version: "1.1"` String Catalogs and a `LocalizedStringResource`-based Swift API that matches what Xcode 26 generates itself — avoiding duplicate symbol errors.
-
-**Reviewable by humans.** Every localization update produces a timestamped HTML change report showing the previous and new value for every language, side by side. `latest.html` is always the current source-of-truth view.
-
-## Using local LLMs on macOS
-
-This skill works with any tool that supports the Agent Skills format. On macOS, you can run your LLM entirely on-device — your app strings and translations never leave your machine.
-
-### Why go local?
-
-| Benefit | Details |
-|---------|---------|
-| **Privacy** | Your app strings, keys, and translations stay on your device. No cloud service sees your content. |
-| **No API cost** | Zero token usage. Translate as many strings as you need, for free. |
-| **Works offline** | No internet connection required once the model is downloaded. |
-| **Fast iteration** | No rate limits or latency from cloud round-trips. |
-
-### Recommended local model runners
-
-| Tool | Description |
-|------|-------------|
-| [Ollama](https://ollama.com) | Open-source LLM runner for macOS. One-command install, runs models locally via CLI or HTTP. Integrates with Cursor, Continue.dev, and other Agent Skills-compatible tools. |
-| [LM Studio](https://lmstudio.ai) | Desktop app for downloading and running LLMs locally. Exposes an OpenAI-compatible local server. |
-| [Apple MLX](https://github.com/ml-explore/mlx-lm) | Apple's ML framework, optimised for Apple Silicon. Runs models directly on your Mac with `mlx_lm.generate`. |
-
-### Recommended models for translation
-
-These models perform well on multilingual translation tasks:
-
-| Model | Strengths |
-|-------|-----------|
-| [Llama 3](https://ollama.com/library/llama3) | Meta's open flagship. Strong general multilingual support. |
-| [Mistral](https://ollama.com/library/mistral) | Fast, accurate, especially for European languages. |
-| [Qwen 2.5](https://ollama.com/library/qwen2.5) | Excellent for CJK (Chinese, Japanese, Korean) and multilingual code. |
-| [DeepSeek R1](https://ollama.com/library/deepseek-r1) | Strong reasoning quality, good for nuanced translation. |
-
-### Quick start with Ollama
-
-```bash
-# Install Ollama
-brew install ollama
-
-# Pull a model optimised for translation
-ollama pull llama3
-
-# Point Cursor or Continue.dev at your local Ollama endpoint
-# then trigger the skill as usual:
-# /xcode-localizer Add the onboarding title in English, Spanish, and French.
-```
-
-> **Note:** Any agent that supports the Agent Skills format and can connect to a local OpenAI-compatible endpoint (Ollama, LM Studio) will work with this skill.
-
-## Example session
-
-Request:
-```
-Use the xcode-localizer skill to add the login screen username placeholder.
+## Example Prompts
+Use xcode-localizer to add the login screen username placeholder.
 English: Username  Spanish: Usuario  Italian: Nome utente
+
+Use xcode-localizer to add the onboarding title in English, Spanish, and French.
+English: Welcome  Spanish: Bienvenido  French: Bienvenue
+
+Use xcode-localizer to add the settings screen title in English and Spanish.
+English: Settings  Spanish: Configuración
+
+Use xcode-localizer to add Italian and French to the project languages.
+
+Use xcode-localizer to delete the login_placeholder_username key.
+
+## Using Local LLMs on macOS
+
+This skill works with any agent that supports the Agent Skills format. On macOS, you can run your LLM entirely on-device — your app strings and translations never leave your machine.
+
+**Why go local?** Privacy (no cloud round-trips), zero API cost, offline support, and faster iteration without rate limits.
+
+**Recommended tools:**
+* [Ollama](https://ollama.com) — one-command install, runs models locally via CLI or HTTP.
+* [LM Studio](https://lmstudio.ai) — desktop app with an OpenAI-compatible local server.
+* [Apple MLX](https://github.com/ml-explore/mlx-lm) — optimized for Apple Silicon.
+
+**Recommended models for translation:**
+* [Llama 3](https://ollama.com/library/llama3) — strong general multilingual support.
+* [Mistral](https://ollama.com/library/mistral) — fast and accurate, especially for European languages.
+* [Qwen 2.5](https://ollama.com/library/qwen2.5) — excellent for CJK and multilingual code.
+
+**Quick start with Ollama:**
+```bash
+brew install ollama
+ollama pull llama3
 ```
 
-The skill creates or updates:
+Then point your agent to the local Ollama endpoint and trigger the skill as usual.
 
-```text
-Translations/Localizable.xcstrings         ← adds login_placeholder_username
-Translations/AppStrings.swift              ← AppStrings.Login.placeholderUsername
-Translations/xcode-localizer.config.json  ← records en, es, it
-Translations/reports/latest.html          ← full catalog view
-Translations/reports/historyofchanges.html ← day-grouped change index
-Translations/reports/13-04-2026-143022-xcode-localizer.html  ← timestamped diff
-```
-
-Generated Swift:
-
-```swift
-// AppStrings.Login.placeholderUsername
-Text(AppStrings.Login.placeholderUsername)
-```
-
-Generated catalog entry:
-
-```json
-"login_placeholder_username": {
-  "comment": "Login username placeholder.",
-  "extractionState": "manual",
-  "localizations": {
-    "en": { "stringUnit": { "state": "translated", "value": "Username" } },
-    "es": { "stringUnit": { "state": "translated", "value": "Usuario" } },
-    "it": { "stringUnit": { "state": "translated", "value": "Nome utente" } }
-  }
-}
-```
-
-## Generated files
-
-```text
-Translations/
-├── Localizable.xcstrings
-├── AppStrings.swift
-├── xcode-localizer.config.json
-└── reports/
-    ├── latest.html
-    ├── historyofchanges.html
-    └── <dd-mm-yyyy-HHMMSS>-xcode-localizer.html
-```
-
-The skill never creates or modifies anything outside `Translations/`.
-
-## Default configuration
-
-Created automatically on first use:
-
-```json
-{
-  "defaultLanguage": "en",
-  "languages": ["en", "es"],
-  "defaultScreen": "common",
-  "validElements": [
-    "accessibility_hint", "accessibility_label", "alert", "button",
-    "context_menu", "empty_state", "error", "label", "link", "message",
-    "navigation_title", "picker", "placeholder", "subtitle", "success",
-    "tab", "text", "title", "toggle", "toolbar", "warning"
-  ],
-  "keyPattern": "{screen}_{element}_{meaning}",
-  "swiftApiName": "AppStrings"
-}
-```
-
-To add languages or elements, edit `Translations/xcode-localizer.config.json` directly or ask the skill:
-
-```
-Use the xcode-localizer skill to add Italian and French to the project languages.
-```
-
-## Running the script
-
-The skill includes a Python script (`apply_xcstrings_changes.py`) that handles the actual xcstrings file modifications. Use it through your agent — no manual invocation needed.
-
-## Skill structure
-
+## Skill Structure
 ```text
 xcode-localizer/
-├── SKILL.md
-├── agents/
-│   ├── claude.yaml
-│   ├── copilot.yaml
-│   ├── gemini.yaml
-│   ├── openai.yaml
-│   └── qwen.yaml
-├── references/
-│   ├── key-convention.md
-│   └── xcode26-xcstrings.md
-└── scripts/
-    └── apply_xcstrings_changes.py
+  SKILL.md                         # Routing logic and output requirements
+  agents/
+    claude.yaml                    # Claude Code agent config
+    copilot.yaml                   # GitHub Copilot agent config
+    gemini.yaml                    # Gemini CLI agent config
+    openai.yaml                    # OpenAI / Codex agent config
+    qwen.yaml                      # Qwen agent config
+  references/
+    key-convention.md              # Key naming convention and element mapping
+    xcode26-xcstrings.md           # Xcode 26 String Catalog format notes
+  scripts/
+    apply_xcstrings_changes.py     # Core script — writes xcstrings, Swift, reports
 tests/
-└── test_script.py
+  test_script.py                   # Automated tests
 ```
-
-## Validation
-
-Validate the skill format:
-
-```bash
-npx skills-ref validate xcode-localizer/
-```
-
-CI runs validation on every pull request and push to `main`.
 
 ## Contributing
+Contributions are welcome! This repository follows the [Agent Skills](https://agentskills.io/home) open format, which has specific structural requirements.
 
-I welcome all contributions, whether that's adding new checks, improving existing checks, or editing this README — everyone is welcome!
+We strongly recommend using AI assistance for contributions:
 
-Keep changes focused on Xcode 26 String Catalog localization:
+* Use the [skill-creator skill](https://github.com/efremidze/skill-creator) with Claude to ensure proper formatting
 
-- Keep `SKILL.md` and reference files consistent.
-- Keep your Markdown concise. There is a token cost to using skills, particularly with `SKILL.md`, so please respect the token budgets of users.
-- Do not add UI editing, Xcode project integration, or legacy format support.
-- Do not add generic localization theory that agents already know; focus on Xcode 26-specific patterns and edge cases.
-- Run `npx skills-ref validate xcode-localizer/` before submitting.
-- All contributions must be licensed under MIT.
+This helps maintain the Agent Skills format and ensures your contribution works correctly with AI agents.
 
-Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
 
-## License
 
-This skill is open-source under the MIT License. See LICENSE for details.
+All work must be licensed under the MIT license so it can benefit the most people.
+
+Please ensure you abide by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## About the author
-
 Created by Jorgemrht.
+
+This skill is maintained to reflect the latest Xcode 26 String Catalog best practices and will be updated as the localization ecosystem evolves.
+
+## License
+This skill is open-source and available under the MIT License. See [LICENSE](LICENSE) for details.
