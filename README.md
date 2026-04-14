@@ -1,13 +1,16 @@
-# Xcode Localizer
+<h1 align="center">Xcode Localizer Agent Skill for AI Coding Assistants</h1>
 
-![Xcode 26](https://img.shields.io/badge/Xcode-26-147EFB?logo=xcode&logoColor=white)
-![macOS 26](https://img.shields.io/badge/macOS-26-000000?logo=apple&logoColor=white)
-![iOS 16+](https://img.shields.io/badge/iOS-16%2B-000000?logo=apple&logoColor=white)
-![Swift 6.0+](https://img.shields.io/badge/Swift-6.0%2B-F05138?logo=swift&logoColor=white)
-![Python 3.14+](https://img.shields.io/badge/Python-3.14%2B-3776AB?logo=python&logoColor=white)
-![License MIT](https://img.shields.io/badge/license-MIT-green)
-![Agent Skills](https://img.shields.io/badge/Agent%20Skills-compatible-F05138)
-![CI](https://github.com/jorgemrht/xcode-localizer/actions/workflows/validate-skill.yml/badge.svg)
+<p align="center">
+  <img src="https://img.shields.io/badge/Xcode-26+-147EFB.svg?logo=xcode&logoColor=white" alt="Requires Xcode 26 and later." />
+  <img src="https://img.shields.io/badge/iOS-16+-2980b9.svg" alt="Designed for iOS 16 and later." />
+  <img src="https://img.shields.io/badge/swift-6+-8e44ad.svg" alt="Requires Swift 6 and later." />
+  <a href="https://twitter.com/jorgemrht">
+    <img src="https://img.shields.io/badge/Contact-@jorgemrht-95a5a6.svg?style=flat" alt="Twitter: @jorgemrht" />
+  </a>
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License MIT">
+  <img src="https://img.shields.io/badge/Agent%20Skills-compatible-F05138" alt="Agent Skills">
+  <img src="https://github.com/jorgemrht/xcode-localizer/actions/workflows/validate-skill.yml/badge.svg" alt="Tests">
+</p>
 
 An [Agent Skill](https://agentskills.io) that creates and updates Xcode 26 String Catalog localization artifacts — and nothing else. No UI edits, no project file changes, no source modifications.
 
@@ -32,24 +35,6 @@ No Node? Install it first:
 
 ```bash
 brew install node
-```
-
-## Requirements
-
-- Python `3.14+` is required to run `xcode-localizer/scripts/apply_xcstrings_changes.py`.
-- On macOS, install it with Homebrew:
-
-```bash
-brew install python@3.14
-python3 --version
-```
-
-- For tests, use a local virtual environment:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install pytest
-.venv/bin/python -m pytest tests/ -v
 ```
 
 ## Usage
@@ -114,8 +99,6 @@ Place the folder where your tool reads skills. For Codex: `$CODEX_HOME/skills/`;
 **Xcode 26 only.** No compatibility shims for older Xcode versions. The skill generates `sourceLanguage`/`version: "1.1"` String Catalogs and a `LocalizedStringResource`-based Swift API that matches what Xcode 26 generates itself — avoiding duplicate symbol errors.
 
 **Reviewable by humans.** Every localization update produces a timestamped HTML change report showing the previous and new value for every language, side by side. `latest.html` is always the current source-of-truth view.
-
-**Python stdlib only.** The bundled `apply_xcstrings_changes.py` script uses no third-party packages (requires Python 3.14+). Drop it into any CI environment without a `pip install` step.
 
 ## Using local LLMs on macOS
 
@@ -246,21 +229,9 @@ To add languages or elements, edit `Translations/xcode-localizer.config.json` di
 Use the xcode-localizer skill to add Italian and French to the project languages.
 ```
 
-## Running the script directly
+## Running the script
 
-```bash
-python3 xcode-localizer/scripts/apply_xcstrings_changes.py apply \
-  --allow-create-translations \
-  --changes-json '{"items":[{"screen":"login","element":"button","meaning":"sign_in","translations":{"en":"Sign in","es":"Iniciar sesión"}}]}'
-```
-
-Validate the catalog:
-
-```bash
-python3 xcode-localizer/scripts/apply_xcstrings_changes.py validate
-```
-
-`validate` also requires Xcode command-line tools (`xcrun`).
+The skill includes a Python script (`apply_xcstrings_changes.py`) that handles the actual xcstrings file modifications. Use it through your agent — no manual invocation needed.
 
 ## Skill structure
 
@@ -290,15 +261,7 @@ Validate the skill format:
 npx skills-ref validate xcode-localizer/
 ```
 
-Run automated tests:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install pytest
-.venv/bin/python -m pytest tests/ -v
-```
-
-CI runs both on every pull request and push to `main`.
+CI runs validation on every pull request and push to `main`.
 
 ## Contributing
 
@@ -310,7 +273,7 @@ Keep changes focused on Xcode 26 String Catalog localization:
 - Keep your Markdown concise. There is a token cost to using skills, particularly with `SKILL.md`, so please respect the token budgets of users.
 - Do not add UI editing, Xcode project integration, or legacy format support.
 - Do not add generic localization theory that agents already know; focus on Xcode 26-specific patterns and edge cases.
-- Run `npx skills-ref validate xcode-localizer/` and `pytest tests/` before submitting.
+- Run `npx skills-ref validate xcode-localizer/` before submitting.
 - All contributions must be licensed under MIT.
 
 Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
