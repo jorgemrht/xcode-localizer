@@ -52,6 +52,7 @@ python3 -m venv .venv
 | 8 | Config in `xcode-localizer.config.json` | Settings persist across sessions without re-asking the user |
 | 9 | `extractionState: manual` on every entry | Prevents Xcode from treating agent-written strings as stale |
 | 10 | No JSON report files | HTML is human-readable; JSON reports are noise in the repo |
+| 11 | Audit before write | Broken variants and placeholders must never reach the catalog |
 
 ## Zero Rule
 
@@ -106,6 +107,8 @@ JSON report files   .xcode-localizer.json   Translations/L10n.swift
 - `author` resolves: `GIT_AUTHOR_NAME` → `git config user.name` → last commit author → `Unknown`.
 - Do not generate JSON reports.
 - Preserve unknown fields in existing `.xcstrings` entries.
+- Treat placeholder mismatches, missing fallback variants, and different variation shapes as errors. Do not write a partial catalog.
+- Use `variations` for plural or device-specific copy. Do not flatten an existing variation into `stringUnit`.
 - On a new key, provide translations for every language in config and every language already in the catalog.
 - Write concise translator context in the top-level `comment` and concise per-language descriptions in each localization `comment`.
 - Use `scripts/apply_xcstrings_changes.py` when a terminal is available.
@@ -183,12 +186,76 @@ For deletion:
 { "items": [{ "key": "login_placeholder_username", "delete": true }] }
 ```
 
+For plurals or device-specific copy, use one `variations` tree per language. A tree has either `plural` or `device` at each level; nest them when both are needed. Every rule must include an `other` fallback. Leaves use `value`.
+
+```json
+{
+  "items": [
+    {
+      "screen": "photos",
+      "element": "text",
+      "meaning": "selected_count",
+      "variations": {
+        "en": {
+          "plural": {
+            "one": { "value": "%lld photo selected" },
+            "other": { "value": "%lld photos selected" }
+          }
+        },
+        "es": {
+          "plural": {
+            "one": { "value": "%lld foto seleccionada" },
+            "other": { "value": "%lld fotos seleccionadas" }
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+```json
+{
+  "items": [
+    {
+      "key": "common_button_continue",
+      "variations": {
+        "en": {
+          "device": {
+            "iphone": { "value": "Continue" },
+            "mac": { "value": "Continue" },
+            "other": { "value": "Continue" }
+          }
+        },
+        "es": {
+          "device": {
+            "iphone": { "value": "Continuar" },
+            "mac": { "value": "Continuar" },
+            "other": { "value": "Continuar" }
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+Never mix `translations` and `variations` for a single item. When updating a key that already has variants, use `variations` so its Xcode structure remains intact.
+
 ## Workflow
 
 1. Check whether `Translations/` exists. If not, ask where to create it and stop.
 2. After confirmation, create `Translations/` and `Translations/Localizable.xcstrings` if needed.
 3. Build the change JSON from the user request.
-4. Run:
+4. Audit the catalog without changing it:
+
+```bash
+python3 /path/to/xcode-localizer/scripts/apply_xcstrings_changes.py audit
+```
+
+The audit checks catalog structure, language coverage, variant shape, required `other` fallbacks, `stringUnit` states, and placeholders at every variant leaf. It also runs `xcstringstool` unless `--skip-xcode-validation` is explicitly necessary.
+
+5. Run:
 
 ```bash
 python3 /path/to/xcode-localizer/scripts/apply_xcstrings_changes.py apply \
@@ -196,7 +263,7 @@ python3 /path/to/xcode-localizer/scripts/apply_xcstrings_changes.py apply \
   --changes-json '<json>'
 ```
 
-5. Validate when Xcode tools are available:
+6. Validate when Xcode tools are available:
 
 ```bash
 xcrun xcstringstool print Translations/Localizable.xcstrings

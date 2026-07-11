@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
 import html
 import json
@@ -115,8 +116,14 @@ SWIFT_KEYWORDS = {
 }
 
 PLACEHOLDER_RE = re.compile(
-    r"(%\([A-Za-z_][A-Za-z0-9_]*\)(?:lld|ld|d|f|@|s))|(%(?:lld|ld|d|f|@|s))|(\{\{[A-Za-z_][A-Za-z0-9_]*\}\})"
+    r"%#@[A-Za-z_][A-Za-z0-9_]*@"
+    r"|%\([A-Za-z_][A-Za-z0-9_]*\)(?:lld|ld|d|f|@|s)"
+    r"|%(?:\d+\$)?[-+ #0']*(?:\d+|\*)?(?:\.(?:\d+|\*))?(?:hh|h|ll|l|L|q|z|t|j)?[@a-zA-Z]"
+    r"|\{\{[A-Za-z_][A-Za-z0-9_]*\}\}"
 )
+PLURAL_CATEGORIES = {"zero", "one", "two", "few", "many", "other"}
+DEVICE_VARIATIONS = {"iphone", "ipad", "mac", "applewatch", "appletv", "vision", "other"}
+VARIATION_TYPES = {"plural": PLURAL_CATEGORIES, "device": DEVICE_VARIATIONS}
 
 
 def snake_case(value: object) -> str:
@@ -205,10 +212,17 @@ def ensure_translations_directory(allow_create_translations: bool) -> None:
 
 
 def write_json(path: Path, data: dict) -> None:
+    atomic_write_text(path, json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+
+
+def atomic_write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(data, handle, ensure_ascii=False, indent=2, sort_keys=True)
-        handle.write("\n")
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", delete=False
+    ) as handle:
+        handle.write(content)
+        temporary_path = Path(handle.name)
+    os.replace(temporary_path, path)
 
 
 def load_catalog(source_language: str, allow_create_translations: bool) -> dict:
@@ -247,12 +261,16 @@ def placeholders(value: str | None) -> list[str]:
 
 
 def get_value(entry: dict, language: str) -> str:
-    return (
+    value = (
         entry.get("localizations", {})
         .get(language, {})
         .get("stringUnit", {})
         .get("value", "")
     )
+    if value:
+        return value
+    leaves = localization_leaf_values(entry.get("localizations", {}).get(language, {}))
+    return " | ".join(f"{path}: {leaves[path]}" for path in sorted(leaves))
 
 
 def get_comment(entry: dict, language: str) -> str:
@@ -270,6 +288,91 @@ def set_value(entry: dict, language: str, value: str, state: str = "translated",
     unit = localization.setdefault("stringUnit", {})
     unit["state"] = state
     unit["value"] = value
+
+
+def variation_spec_error(path: str, message: str) -> None:
+    raise SystemExit(f"Invalid variation at {path}: {message}")
+
+
+def validate_variation_spec(spec: object, path: str) -> None:
+    if not isinstance(spec, dict):
+        variation_spec_error(path, "expected an object")
+    unknown = set(spec) - {"value", "plural", "device"}
+    if unknown:
+        variation_spec_error(path, f"unsupported fields: {', '.join(sorted(unknown))}")
+    variation_kinds = [kind for kind in VARIATION_TYPES if kind in spec]
+    if len(variation_kinds) > 1:
+        variation_spec_error(path, "nest plural and device rules instead of placing both at the same level")
+    if "value" in spec and not isinstance(spec["value"], str):
+        variation_spec_error(path, "value must be a string")
+    if not variation_kinds and "value" not in spec:
+        variation_spec_error(path, "provide value, plural, or device")
+    for kind in variation_kinds:
+        variants = spec[kind]
+        if not isinstance(variants, dict) or not variants:
+            variation_spec_error(path, f"{kind} must be a non-empty object")
+        unknown_variants = set(variants) - VARIATION_TYPES[kind]
+        if unknown_variants:
+            variation_spec_error(path, f"invalid {kind} variants: {', '.join(sorted(unknown_variants))}")
+        if "other" not in variants:
+            variation_spec_error(path, f"{kind} requires an other fallback")
+        for name, child in variants.items():
+            validate_variation_spec(child, f"{path}.{kind}.{name}")
+
+
+def merge_variation_node(existing: object, spec: dict, state: str) -> dict:
+    node = copy.deepcopy(existing) if isinstance(existing, dict) else {}
+    if "value" in spec:
+        unit = node.setdefault("stringUnit", {})
+        unit["state"] = state
+        unit["value"] = spec["value"]
+    for kind in VARIATION_TYPES:
+        if kind not in spec:
+            continue
+        target_variations = node.setdefault("variations", {})
+        target = target_variations.setdefault(kind, {})
+        for name, child in spec[kind].items():
+            target[name] = merge_variation_node(target.get(name), child, state)
+    return node
+
+
+def localization_leaf_values(node: object, path: str = "root") -> dict[str, str]:
+    if not isinstance(node, dict):
+        return {}
+    leaves = {}
+    unit = node.get("stringUnit")
+    if isinstance(unit, dict) and isinstance(unit.get("value"), str):
+        leaves[path] = unit["value"]
+    variations = node.get("variations", {})
+    if isinstance(variations, dict):
+        for kind, variants in variations.items():
+            if not isinstance(variants, dict):
+                continue
+            for name, child in variants.items():
+                leaves.update(localization_leaf_values(child, f"{path}.{kind}.{name}"))
+    return leaves
+
+
+def variation_shape(node: object, path: str = "root") -> set[str]:
+    return set(localization_leaf_values(node, path).keys())
+
+
+def validate_localization_pair(key: str, language: str, source: object, target: object) -> list[str]:
+    source_values = localization_leaf_values(source)
+    target_values = localization_leaf_values(target)
+    issues = []
+    if set(source_values) != set(target_values):
+        issues.append(
+            f"{key}/{language}: variation paths {sorted(target_values)} differ from source {sorted(source_values)}"
+        )
+    for path in sorted(set(source_values) & set(target_values)):
+        source_tokens = placeholders(source_values[path])
+        target_tokens = placeholders(target_values[path])
+        if source_tokens != target_tokens:
+            issues.append(
+                f"{key}/{language}/{path}: placeholders {target_tokens} differ from source {source_tokens}"
+            )
+    return issues
 
 
 def git_value(command: list[str]) -> str:
@@ -352,13 +455,21 @@ def apply_changes(
             continue
 
         translations = item.get("translations", {})
-        if not translations:
-            raise SystemExit(f"No translations provided for key '{key}'")
+        variation_translations = item.get("variations", {})
+        if translations and variation_translations:
+            raise SystemExit(f"Use either translations or variations for key '{key}', not both")
+        if not translations and not variation_translations:
+            raise SystemExit(f"No translations or variations provided for key '{key}'")
+        if translations and not isinstance(translations, dict):
+            raise SystemExit(f"translations must be an object for key '{key}'")
+        if variation_translations and not isinstance(variation_translations, dict):
+            raise SystemExit(f"variations must be an object keyed by language for key '{key}'")
 
         existed = key in strings
         required_languages = set(catalog_languages(catalog, settings))
         if not existed:
-            missing_languages = sorted(language for language in required_languages if language not in translations)
+            provided_languages = set(translations) if translations else set(variation_translations)
+            missing_languages = sorted(language for language in required_languages if language not in provided_languages)
             if missing_languages:
                 raise SystemExit(
                     f"Missing translations for key '{key}': {', '.join(missing_languages)}. "
@@ -376,20 +487,54 @@ def apply_changes(
             language: get_value(entry, language)
             for language in entry.get("localizations", {}).keys()
         } if existed else {}
-        source_value = translations.get(source_language) or get_value(entry, source_language)
-        source_placeholders = placeholders(source_value)
+        if translations:
+            source_value = translations.get(source_language) or get_value(entry, source_language)
+            source_placeholders = placeholders(source_value)
+            for language, value in translations.items():
+                localization = entry.get("localizations", {}).get(language, {})
+                if localization.get("variations"):
+                    raise SystemExit(
+                        f"{key}/{language} already uses variations. Update it with the variations contract to preserve its structure."
+                    )
+                target_placeholders = placeholders(value)
+                if source_placeholders != target_placeholders:
+                    raise SystemExit(
+                        f"{key}/{language}: placeholders {target_placeholders} differ from source {source_placeholders}"
+                    )
+                comment = comments.get(language, comments.get("default", ""))
+                if not comment:
+                    comment = default_comment_for(key, language, item, value, settings)
+                if language == source_language and not entry.get("comment"):
+                    entry["comment"] = comment
+                set_value(entry, language, value, item.get("state", "translated"), comment)
+        else:
+            for language, spec in variation_translations.items():
+                validate_variation_spec(spec, f"{key}/{language}")
+            for language, spec in variation_translations.items():
+                value = next(iter(localization_leaf_values(merge_variation_node({}, spec, item.get("state", "translated"))).values()), "")
+                comment = comments.get(language, comments.get("default", ""))
+                if not comment:
+                    comment = default_comment_for(key, language, item, value, settings)
+                if language == source_language and not entry.get("comment"):
+                    entry["comment"] = comment
+                localization = entry.setdefault("localizations", {}).setdefault(language, {})
+                if comment:
+                    localization["comment"] = comment
+                entry["localizations"][language] = merge_variation_node(
+                    localization, spec, item.get("state", "translated")
+                )
+                if comment:
+                    entry["localizations"][language]["comment"] = comment
 
-        for language, value in translations.items():
-            target_placeholders = placeholders(value)
-            if source_placeholders and target_placeholders != source_placeholders:
-                warning = f"{key}/{language}: placeholders {target_placeholders} differ from source {source_placeholders}"
-                warnings.append(warning)
-            comment = comments.get(language, comments.get("default", ""))
-            if not comment:
-                comment = default_comment_for(key, language, item, value, settings)
-            if language == source_language and not entry.get("comment"):
-                entry["comment"] = comment
-            set_value(entry, language, value, item.get("state", "translated"), comment)
+            source_localization = entry.get("localizations", {}).get(source_language)
+            if not source_localization:
+                raise SystemExit(f"{key}: variations require a {source_language} source localization")
+            issues = []
+            for language, localization in entry.get("localizations", {}).items():
+                if language != source_language:
+                    issues.extend(validate_localization_pair(key, language, source_localization, localization))
+            if issues:
+                raise SystemExit("Refusing to write invalid variations:\n" + "\n".join(issues))
 
         changed_keys.append(key)
         event_languages = set(previous_values.keys()) | set(translations.keys())
@@ -408,6 +553,9 @@ def apply_changes(
     catalog["version"] = "1.1"
     catalog["strings"] = dict(sorted(strings.items()))
     settings["languages"] = catalog_languages(catalog, settings)
+    issues = catalog_audit_issues(catalog, settings)
+    if issues:
+        raise SystemExit("Refusing to write a catalog that fails semantic audit:\n" + "\n".join(issues))
     write_json(CATALOG_PATH, catalog)
     write_settings(settings)
     write_swift_api(catalog, settings)
@@ -487,7 +635,7 @@ def write_swift_api(catalog: dict, settings: dict) -> None:
         lines.pop()
     lines.append("}")
     SWIFT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SWIFT_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    atomic_write_text(SWIFT_PATH, "\n".join(lines) + "\n")
 
 
 def catalog_languages(catalog: dict, settings: dict) -> list[str]:
@@ -496,6 +644,100 @@ def catalog_languages(catalog: dict, settings: dict) -> list[str]:
     for entry in catalog.get("strings", {}).values():
         languages.update(entry.get("localizations", {}).keys())
     return [source_language] + sorted(language for language in languages if language != source_language)
+
+
+def localization_structure_issues(key: str, language: str, node: object, path: str = "root") -> list[str]:
+    prefix = f"{key}/{language}/{path}"
+    if not isinstance(node, dict):
+        return [f"{prefix}: localization node must be an object"]
+    issues = []
+    unit = node.get("stringUnit")
+    if unit is not None:
+        if not isinstance(unit, dict) or not isinstance(unit.get("value"), str):
+            issues.append(f"{prefix}: stringUnit requires a string value")
+        elif not isinstance(unit.get("state"), str):
+            issues.append(f"{prefix}: stringUnit requires a state")
+    variations = node.get("variations")
+    if variations is not None:
+        if not isinstance(variations, dict):
+            issues.append(f"{prefix}: variations must be an object")
+        else:
+            for kind, variants in variations.items():
+                if kind not in VARIATION_TYPES:
+                    continue
+                if not isinstance(variants, dict) or not variants:
+                    issues.append(f"{prefix}.{kind}: variations must be a non-empty object")
+                    continue
+                unknown = set(variants) - VARIATION_TYPES[kind]
+                if unknown:
+                    issues.append(f"{prefix}.{kind}: unsupported variants {', '.join(sorted(unknown))}")
+                if "other" not in variants:
+                    issues.append(f"{prefix}.{kind}: missing other fallback")
+                for name, child in variants.items():
+                    issues.extend(localization_structure_issues(key, language, child, f"{path}.{kind}.{name}"))
+    if unit is None and not variations:
+        issues.append(f"{prefix}: localization has neither stringUnit nor variations")
+    return issues
+
+
+def catalog_audit_issues(catalog: object, settings: dict) -> list[str]:
+    if not isinstance(catalog, dict):
+        return ["catalog root must be an object"]
+    strings = catalog.get("strings")
+    if not isinstance(strings, dict):
+        return ["catalog strings must be an object"]
+    source_language = catalog.get("sourceLanguage")
+    if not isinstance(source_language, str) or not source_language:
+        return ["catalog sourceLanguage must be a non-empty string"]
+
+    issues = []
+    expected_languages = set(catalog_languages(catalog, settings))
+    for key, entry in strings.items():
+        if not isinstance(key, str) or not re.match(r"^[a-z][a-z0-9_]*$", key):
+            issues.append(f"{key}: key must use lowercase snake_case")
+        if not isinstance(entry, dict):
+            issues.append(f"{key}: entry must be an object")
+            continue
+        localizations = entry.get("localizations")
+        if not isinstance(localizations, dict):
+            issues.append(f"{key}: localizations must be an object")
+            continue
+        missing_languages = expected_languages - set(localizations)
+        if missing_languages:
+            issues.append(f"{key}: missing localizations for {', '.join(sorted(missing_languages))}")
+        source = localizations.get(source_language)
+        if source is None:
+            issues.append(f"{key}: missing source localization {source_language}")
+            continue
+        for language, localization in localizations.items():
+            issues.extend(localization_structure_issues(key, language, localization))
+        source_values = localization_leaf_values(source)
+        if not source_values:
+            issues.append(f"{key}/{source_language}: source localization has no string values")
+            continue
+        for language, localization in localizations.items():
+            if language != source_language:
+                issues.extend(validate_localization_pair(key, language, source, localization))
+    return issues
+
+
+def audit_catalog() -> int:
+    if not CATALOG_PATH.exists():
+        print(f"Localization audit failed: missing {CATALOG_PATH}", file=sys.stderr)
+        return 1
+    try:
+        catalog = read_json_file(CATALOG_PATH)
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"Localization audit failed: {error}", file=sys.stderr)
+        return 1
+    issues = catalog_audit_issues(catalog, read_settings())
+    if issues:
+        print("Localization audit failed:", file=sys.stderr)
+        for issue in issues:
+            print(f"- {issue}", file=sys.stderr)
+        return 1
+    print("Localization semantic audit passed")
+    return 0
 
 
 def event_languages(catalog: dict, events: list[dict], settings: dict) -> list[str]:
@@ -894,9 +1136,9 @@ def write_html_report(catalog: dict, events: list[dict], author: str, settings: 
     now = dt.datetime.now()
     generated_at = now.strftime("%d-%m-%Y %H:%M:%S")
     timestamped = unique_change_report_path(now)
-    timestamped.write_text(render_change_report(catalog, events, generated_at, settings), encoding="utf-8")
-    LATEST_REPORT_PATH.write_text(render_current_report(catalog, generated_at, author, settings), encoding="utf-8")
-    HISTORY_REPORT_PATH.write_text(render_history_report(generated_at), encoding="utf-8")
+    atomic_write_text(timestamped, render_change_report(catalog, events, generated_at, settings))
+    atomic_write_text(LATEST_REPORT_PATH, render_current_report(catalog, generated_at, author, settings))
+    atomic_write_text(HISTORY_REPORT_PATH, render_history_report(generated_at))
     return [LATEST_REPORT_PATH, HISTORY_REPORT_PATH, timestamped]
 
 
@@ -929,6 +1171,8 @@ def main() -> None:
     apply_parser.add_argument("--skip-validation", action="store_true")
 
     subparsers.add_parser("validate")
+    audit_parser = subparsers.add_parser("audit")
+    audit_parser.add_argument("--skip-xcode-validation", action="store_true")
 
     args = parser.parse_args()
     if args.command == "apply":
@@ -946,6 +1190,11 @@ def main() -> None:
 
     if args.command == "validate":
         raise SystemExit(validate_catalog())
+
+    if args.command == "audit":
+        semantic_code = audit_catalog()
+        xcode_code = 0 if args.skip_xcode_validation else validate_catalog()
+        raise SystemExit(1 if semantic_code or xcode_code else 0)
 
 
 if __name__ == "__main__":
