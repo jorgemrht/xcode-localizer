@@ -159,6 +159,28 @@ PLURAL_CATEGORIES = {"zero", "one", "two", "few", "many", "other"}
 DEVICE_VARIATIONS = {"iphone", "ipad", "mac", "applewatch", "appletv", "vision", "other"}
 VARIATION_TYPES = {"plural": PLURAL_CATEGORIES, "device": DEVICE_VARIATIONS}
 
+# Cardinal plural categories required by CLDR for languages that differ from
+# the common one/other pattern. The catalog is validated per target language.
+PLURAL_CATEGORIES_BY_LANGUAGE = {
+    "ar": {"zero", "one", "two", "few", "many", "other"},
+    "be": {"one", "few", "many", "other"},
+    "cs": {"one", "few", "other"},
+    "cy": {"zero", "one", "two", "few", "many", "other"},
+    "ga": {"one", "two", "few", "many", "other"},
+    "ja": {"other"},
+    "ko": {"other"},
+    "lt": {"one", "few", "many", "other"},
+    "lv": {"zero", "one", "other"},
+    "pl": {"one", "few", "many", "other"},
+    "ru": {"one", "few", "many", "other"},
+    "sk": {"one", "few", "other"},
+    "sl": {"one", "two", "few", "other"},
+    "th": {"other"},
+    "uk": {"one", "few", "many", "other"},
+    "vi": {"other"},
+    "zh": {"other"},
+}
+
 
 def snake_case(value: object) -> str:
     normalized = unicodedata.normalize("NFKD", str(value))
@@ -328,7 +350,21 @@ def variation_spec_error(path: str, message: str) -> None:
     raise SystemExit(f"Invalid variation at {path}: {message}")
 
 
-def validate_variation_spec(spec: object, path: str) -> None:
+def language_code(language: str) -> str:
+    return language.replace("_", "-").split("-", 1)[0].lower()
+
+
+def required_plural_categories(language: str) -> set[str]:
+    return PLURAL_CATEGORIES_BY_LANGUAGE.get(language_code(language), {"one", "other"})
+
+
+def missing_plural_categories(language: str, variants: object) -> set[str]:
+    if not isinstance(variants, dict):
+        return required_plural_categories(language)
+    return required_plural_categories(language) - set(variants)
+
+
+def validate_variation_spec(spec: object, path: str, language: str) -> None:
     if not isinstance(spec, dict):
         variation_spec_error(path, "expected an object")
     unknown = set(spec) - {"value", "plural", "device"}
@@ -350,8 +386,15 @@ def validate_variation_spec(spec: object, path: str) -> None:
             variation_spec_error(path, f"invalid {kind} variants: {', '.join(sorted(unknown_variants))}")
         if "other" not in variants:
             variation_spec_error(path, f"{kind} requires an other fallback")
+        if kind == "plural":
+            missing = missing_plural_categories(language, variants)
+            if missing:
+                variation_spec_error(
+                    path,
+                    f"plural for {language} is missing required CLDR categories: {', '.join(sorted(missing))}",
+                )
         for name, child in variants.items():
-            validate_variation_spec(child, f"{path}.{kind}.{name}")
+            validate_variation_spec(child, f"{path}.{kind}.{name}", language)
 
 
 def merge_variation_node(existing: object, spec: dict, state: str) -> dict:
@@ -391,17 +434,36 @@ def variation_shape(node: object, path: str = "root") -> set[str]:
     return set(localization_leaf_values(node, path).keys())
 
 
+def normalized_variation_path(path: str) -> str:
+    return re.sub(r"\.plural\.(?:zero|one|two|few|many|other)", ".plural.*", path)
+
+
+def source_path_for_target_path(target_path: str, source_values: dict[str, str]) -> str | None:
+    if target_path in source_values:
+        return target_path
+    fallback = re.sub(r"\.plural\.(?:zero|one|two|few|many|other)", ".plural.other", target_path)
+    if fallback in source_values:
+        return fallback
+    normalized = normalized_variation_path(target_path)
+    return next((path for path in source_values if normalized_variation_path(path) == normalized), None)
+
+
 def validate_localization_pair(key: str, language: str, source: object, target: object) -> list[str]:
     source_values = localization_leaf_values(source)
     target_values = localization_leaf_values(target)
     issues = []
-    if set(source_values) != set(target_values):
+    source_shape = {normalized_variation_path(path) for path in source_values}
+    target_shape = {normalized_variation_path(path) for path in target_values}
+    if source_shape != target_shape:
         issues.append(
-            f"{key}/{language}: variation paths {sorted(target_values)} differ from source {sorted(source_values)}"
+            f"{key}/{language}: variation structure {sorted(target_shape)} differs from source {sorted(source_shape)}"
         )
-    for path in sorted(set(source_values) & set(target_values)):
-        source_tokens = placeholders(source_values[path])
-        target_tokens = placeholders(target_values[path])
+    for path, target_value in sorted(target_values.items()):
+        source_path = source_path_for_target_path(path, source_values)
+        if source_path is None:
+            continue
+        source_tokens = placeholders(source_values[source_path])
+        target_tokens = placeholders(target_value)
         if source_tokens != target_tokens:
             issues.append(
                 f"{key}/{language}/{path}: placeholders {target_tokens} differ from source {source_tokens}"
@@ -548,7 +610,7 @@ def apply_changes(
                 set_value(entry, language, value, item.get("state", "translated"), comment)
         else:
             for language, spec in variation_translations.items():
-                validate_variation_spec(spec, f"{key}/{language}")
+                validate_variation_spec(spec, f"{key}/{language}", language)
             for language, spec in variation_translations.items():
                 value = next(iter(localization_leaf_values(merge_variation_node({}, spec, item.get("state", "translated"))).values()), "")
                 comment = comments.get(language, comments.get("default", ""))
@@ -712,6 +774,13 @@ def localization_structure_issues(key: str, language: str, node: object, path: s
                     issues.append(f"{prefix}.{kind}: unsupported variants {', '.join(sorted(unknown))}")
                 if "other" not in variants:
                     issues.append(f"{prefix}.{kind}: missing other fallback")
+                if kind == "plural":
+                    missing = missing_plural_categories(language, variants)
+                    if missing:
+                        issues.append(
+                            f"{prefix}.{kind}: {language} is missing required CLDR categories "
+                            f"{', '.join(sorted(missing))}"
+                        )
                 for name, child in variants.items():
                     issues.extend(localization_structure_issues(key, language, child, f"{path}.{kind}.{name}"))
     if unit is None and not variations:
@@ -834,6 +903,26 @@ def used_localization_keys(files: list[Path], catalog: dict, settings: dict) -> 
     return used
 
 
+def dynamic_localization_usages(files: list[Path]) -> list[dict]:
+    patterns = (
+        re.compile(
+            r"\bString\s*\(\s*localized\s*:\s*"
+            r"(?!\"(?:[^\"\\]|\\.)*\"\s*[,)]|AppStrings\.|String\.LocalizationValue\s*\(\s*\").*"
+        ),
+        re.compile(r"\b(?:LocalizedStringResource|LocalizedStringKey|String\.LocalizationValue)\s*\(\s*(?!\").*"),
+    )
+    usages = []
+    for path in files:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for line_number, line in enumerate(lines, start=1):
+            if any(pattern.search(line) for pattern in patterns):
+                usages.append({"path": path.resolve(), "line": line_number})
+    return usages
+
+
 def visible_text_candidate(value: str, catalog_keys: set[str]) -> bool:
     text = value.strip()
     if not text or text in catalog_keys:
@@ -926,6 +1015,7 @@ def print_repository_audit(source_root: Path) -> int:
     non_localized = non_localized_text_candidates(files, catalog, settings)
     used_keys = used_localization_keys(files, catalog, settings)
     unused_keys = sorted(set(catalog.get("strings", {})) - used_keys)
+    dynamic_usages = dynamic_localization_usages(files)
     languages = catalog_languages(catalog, settings)
     default_language = catalog.get("sourceLanguage", settings["defaultLanguage"])
 
@@ -952,10 +1042,20 @@ def print_repository_audit(source_root: Path) -> int:
             print(f"  - {language}: {value}")
 
     print("\nPossibly unused localization keys")
+    if dynamic_usages:
+        print("- Dynamic localization usage detected:")
+        for usage in dynamic_usages:
+            print(f"  - {usage['path']}:{usage['line']}")
+        print("- No key is safe to remove automatically while dynamic localization usage remains.")
     if not unused_keys:
         print("- None")
-    for key in unused_keys:
-        print(f"- {key}")
+    elif dynamic_usages:
+        print("- Keys found only by static analysis:")
+        for key in unused_keys:
+            print(f"  - {key}")
+    else:
+        for key in unused_keys:
+            print(f"- {key}")
 
     return 0
 

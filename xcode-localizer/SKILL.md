@@ -13,7 +13,7 @@ metadata:
   short-description: Xcode 26 localizations only
   author: Jorgemrht
   license: MIT
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Xcode Localizer
@@ -55,6 +55,8 @@ python3 -m venv .venv
 | 11 | Audit before write | Broken variants and placeholders must never reach the catalog |
 | 12 | Ask before repository review | Missing translations, unused keys, and non-localized UI text require source scanning |
 | 13 | Ask again before code changes | Proposed replacements must never be applied silently |
+| 14 | Use CLDR plural coverage per language | Polish, Arabic, and similar languages need more than `one` and `other` |
+| 15 | Treat dynamic key use as uncertain | Static scanning cannot prove that a runtime-generated key is unused |
 
 ## Zero Rule
 
@@ -113,7 +115,7 @@ JSON report files   .xcode-localizer.json   Translations/L10n.swift
 - `author` resolves: `GIT_AUTHOR_NAME` → `git config user.name` → last commit author → `Unknown`.
 - Do not generate JSON reports.
 - Preserve unknown fields in existing `.xcstrings` entries.
-- Treat placeholder mismatches, missing fallback variants, and different variation shapes as errors. Do not write a partial catalog.
+- Treat placeholder mismatches, missing fallback variants, missing CLDR plural categories, and different device or variation structures as errors. Plural categories may differ between languages when their CLDR rules differ.
 - Use `variations` for plural or device-specific copy. Do not flatten an existing variation into `stringUnit`.
 - On a new key, provide translations for every language in config and every language already in the catalog.
 - Write concise translator context in the top-level `comment` and concise per-language descriptions in each localization `comment`.
@@ -194,7 +196,7 @@ For deletion:
 { "items": [{ "key": "login_placeholder_username", "delete": true }] }
 ```
 
-For plurals or device-specific copy, use one `variations` tree per language. A tree has either `plural` or `device` at each level; nest them when both are needed. Every rule must include an `other` fallback. Leaves use `value`.
+For plurals or device-specific copy, use one `variations` tree per language. A tree has either `plural` or `device` at each level; nest them when both are needed. Every rule must include an `other` fallback. Plural branches must include every CLDR cardinal category required by their language: English uses `one` and `other`; Polish uses `one`, `few`, `many`, and `other`; Arabic uses all six categories. Leaves use `value`.
 
 ```json
 {
