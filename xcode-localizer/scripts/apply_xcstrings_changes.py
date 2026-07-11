@@ -72,6 +72,36 @@ DEFAULT_SETTINGS = {
 }
 REPORT_APP_VERSION = "Unknown"
 REPORT_APP_BUILD = "Unknown"
+SOURCE_EXCLUDED_DIRS = {
+    ".build",
+    ".git",
+    ".swiftpm",
+    "Build",
+    "DerivedData",
+    "Pods",
+    "Translations",
+    "build",
+}
+LOCALIZATION_API_NAMES = {
+    "LocalizedStringResource",
+    "String(localized:",
+    "NSLocalizedString",
+    "AppStrings.",
+}
+SWIFT_STRING_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
+APP_STRINGS_RE = re.compile(r"\bAppStrings\.([A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)?\b")
+NON_LOCALIZED_PATTERNS = [
+    ("text", re.compile(r"\bText\s*\(\s*verbatim\s*:\s*\"((?:\\.|[^\"\\])*)\"")),
+    ("text", re.compile(r"\bText\s*\(\s*String\s*\(\s*\"((?:\\.|[^\"\\])*)\"\s*\)\s*\)")),
+    ("label", re.compile(r"\.(?:text|title)\s*=\s*\"((?:\\.|[^\"\\])*)\"")),
+    ("placeholder", re.compile(r"\.placeholder\s*=\s*\"((?:\\.|[^\"\\])*)\"")),
+    ("accessibility_label", re.compile(r"\.accessibilityLabel\s*=\s*\"((?:\\.|[^\"\\])*)\"")),
+    ("accessibility_hint", re.compile(r"\.accessibilityHint\s*=\s*\"((?:\\.|[^\"\\])*)\"")),
+    ("button", re.compile(r"\bsetTitle\s*\(\s*\"((?:\\.|[^\"\\])*)\"\s*,")),
+    ("alert", re.compile(r"\bUIAlertAction\s*\(\s*title\s*:\s*\"((?:\\.|[^\"\\])*)\"")),
+    ("alert", re.compile(r"\bUIAlertController\s*\([^)]*\btitle\s*:\s*\"((?:\\.|[^\"\\])*)\"")),
+    ("message", re.compile(r"\bNSAttributedString\s*\(\s*string\s*:\s*\"((?:\\.|[^\"\\])*)\"")),
+]
 
 SWIFT_KEYWORDS = {
     "associatedtype",
@@ -749,6 +779,187 @@ def audit_catalog() -> int:
     return 0
 
 
+def swift_literal_value(raw: str) -> str:
+    try:
+        return json.loads(f'"{raw}"')
+    except json.JSONDecodeError:
+        return raw
+
+
+def swift_files(source_root: Path) -> list[Path]:
+    if not source_root.exists():
+        raise SystemExit(f"Source root does not exist: {source_root}")
+    if source_root.is_file():
+        return [source_root] if source_root.suffix == ".swift" else []
+    files = []
+    for root, dirs, filenames in os.walk(source_root):
+        dirs[:] = [directory for directory in dirs if directory not in SOURCE_EXCLUDED_DIRS]
+        for filename in filenames:
+            if filename.endswith(".swift"):
+                files.append(Path(root) / filename)
+    return sorted(files)
+
+
+def swift_api_reference_map(catalog: dict, settings: dict) -> dict[str, str]:
+    references = {}
+    grouped: dict[str, dict[str, str]] = {}
+    for key in catalog.get("strings", {}):
+        screen, name = split_key(key, settings)
+        grouped.setdefault(upper_camel(screen), {})[lower_camel(name)] = key
+    for screen, names in grouped.items():
+        for property_name, key in names.items():
+            references[f"AppStrings.{screen}.{property_name}"] = key
+    return references
+
+
+def used_localization_keys(files: list[Path], catalog: dict, settings: dict) -> set[str]:
+    catalog_keys = set(catalog.get("strings", {}))
+    api_references = swift_api_reference_map(catalog, settings)
+    used = set()
+    for path in files:
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for reference, key in api_references.items():
+            if reference in content:
+                used.add(key)
+        for line in content.splitlines():
+            if not any(api_name in line for api_name in LOCALIZATION_API_NAMES):
+                continue
+            for match in SWIFT_STRING_RE.finditer(line):
+                value = swift_literal_value(match.group(1))
+                if value in catalog_keys:
+                    used.add(value)
+    return used
+
+
+def visible_text_candidate(value: str, catalog_keys: set[str]) -> bool:
+    text = value.strip()
+    if not text or text in catalog_keys:
+        return False
+    if len(text) < 2 or len(text) > 120:
+        return False
+    if re.fullmatch(r"[A-Za-z0-9_.-]+", text) and ("_" in text or "." in text):
+        return False
+    if re.search(r"https?://|^[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+$", text):
+        return False
+    if not re.search(r"[A-Za-zÀ-ÿ]", text):
+        return False
+    return True
+
+
+def screen_from_path(path: Path) -> str:
+    stem = path.stem
+    stem = re.sub(r"(ViewController|Controller|View|Screen|Scene)$", "", stem)
+    return snake_case(stem or "common") or "common"
+
+
+def proposed_key(path: Path, element: str, text: str, catalog: dict, settings: dict, claimed: set[str]) -> str:
+    screen = screen_from_path(path)
+    if element not in settings["validElements"]:
+        element = "text"
+    words = snake_case(text)
+    words = "_".join(words.split("_")[:6]) or "copy"
+    base = f"{screen}_{element}_{words}"
+    key = base
+    index = 2
+    existing = set(catalog.get("strings", {}))
+    while key in existing or key in claimed:
+        key = f"{base}_{index}"
+        index += 1
+    claimed.add(key)
+    return key
+
+
+def non_localized_text_candidates(files: list[Path], catalog: dict, settings: dict) -> list[dict]:
+    catalog_keys = set(catalog.get("strings", {}))
+    claimed: set[str] = set()
+    candidates = []
+    seen: set[tuple[Path, int, str]] = set()
+    for path in files:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for line_number, line in enumerate(lines, start=1):
+            for element, pattern in NON_LOCALIZED_PATTERNS:
+                for match in pattern.finditer(line):
+                    text = swift_literal_value(match.group(1)).strip()
+                    marker = (path, line_number, text)
+                    if marker in seen or not visible_text_candidate(text, catalog_keys):
+                        continue
+                    seen.add(marker)
+                    candidates.append({
+                        "path": path.resolve(),
+                        "line": line_number,
+                        "text": text,
+                        "proposedKey": proposed_key(path, element, text, catalog, settings, claimed),
+                    })
+    return candidates
+
+
+def missing_translation_rows(catalog: dict, settings: dict) -> list[dict]:
+    languages = catalog_languages(catalog, settings)
+    rows = []
+    for key, entry in sorted(catalog.get("strings", {}).items()):
+        localizations = entry.get("localizations", {}) if isinstance(entry, dict) else {}
+        missing = []
+        existing = {}
+        for language in languages:
+            value = get_value(entry, language) if isinstance(entry, dict) else ""
+            state = localizations.get(language, {}).get("stringUnit", {}).get("state", "")
+            if not value or state == "needs_review":
+                missing.append(language)
+            else:
+                existing[language] = value
+        if missing:
+            rows.append({"key": key, "missing": missing, "existing": existing})
+    return rows
+
+
+def print_repository_audit(source_root: Path) -> int:
+    settings = read_settings()
+    catalog = load_catalog(settings["defaultLanguage"], allow_create_translations=False)
+    files = swift_files(source_root)
+    missing_rows = missing_translation_rows(catalog, settings)
+    non_localized = non_localized_text_candidates(files, catalog, settings)
+    used_keys = used_localization_keys(files, catalog, settings)
+    unused_keys = sorted(set(catalog.get("strings", {})) - used_keys)
+    languages = catalog_languages(catalog, settings)
+    default_language = catalog.get("sourceLanguage", settings["defaultLanguage"])
+
+    print("Missing translations")
+    if not missing_rows:
+        print("- None")
+    for row in missing_rows:
+        print(f"- Key: {row['key']}")
+        print(f"  Missing languages: {', '.join(row['missing'])}")
+        print("  Existing translations:")
+        for language, value in row["existing"].items():
+            print(f"  - {language}: {value}")
+
+    print("\nNon-localized UI text")
+    if not non_localized:
+        print("- None")
+    for item in non_localized:
+        print(f"- File: {item['path']}:{item['line']}")
+        print(f"  Text: {item['text']}")
+        print(f"  Proposed key: {item['proposedKey']}")
+        print("  Proposed translations:")
+        for language in languages:
+            value = item["text"] if language == default_language else "[agent translation required]"
+            print(f"  - {language}: {value}")
+
+    print("\nPossibly unused localization keys")
+    if not unused_keys:
+        print("- None")
+    for key in unused_keys:
+        print(f"- {key}")
+
+    return 0
+
+
 def event_languages(catalog: dict, events: list[dict], settings: dict) -> list[str]:
     languages = set(catalog_languages(catalog, settings))
     for event in events:
@@ -1204,6 +1415,8 @@ def main() -> None:
     subparsers.add_parser("validate")
     audit_parser = subparsers.add_parser("audit")
     audit_parser.add_argument("--skip-xcode-validation", action="store_true")
+    repository_audit_parser = subparsers.add_parser("repository-audit")
+    repository_audit_parser.add_argument("--source-root", default=".")
 
     args = parser.parse_args()
     if args.command == "apply":
@@ -1226,6 +1439,9 @@ def main() -> None:
         semantic_code = audit_catalog()
         xcode_code = 0 if args.skip_xcode_validation else validate_catalog()
         raise SystemExit(1 if semantic_code or xcode_code else 0)
+
+    if args.command == "repository-audit":
+        raise SystemExit(print_repository_audit(Path(args.source_root)))
 
 
 if __name__ == "__main__":
