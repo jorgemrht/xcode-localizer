@@ -102,6 +102,7 @@ JSON report files   .xcode-localizer.json   Translations/L10n.swift
 - Generate HTML review reports every time localization text changes.
 - `latest.html` title: `Xcode Localizer - Current localizations`. Show `Last time generated: <dd-mm-yyyy hh:mm:ss>` under the page title. Includes views: all keys, key pattern groups, screen groups, element groups, and key descriptions. The `Go To Key descriptions` button and the full ungrouped Key descriptions section are visible only in the All keys view. Key descriptions are also shown inside each key pattern, screen, and element group.
 - `historyofchanges.html` shows change reports from most recent to oldest. Show `Last time generated: <dd-mm-yyyy hh:mm:ss>` under the page title. Render one table with `date` and `author` columns plus a right-aligned review button column with no header text. Display dates as `dd-mm-yyyy hh:mm:ss`, not filenames. Include two filters next to `Current localizations`: a calendar date input and an author text input. If no rows match, hide the table and show centered text: `No localization text was generated for that date or author.`
+- `historyofchanges.html` renders `date`, `version`, `build`, and `author` columns, followed by the right-aligned review button. Each change report persists its app version and build in HTML metadata. Resolve them from `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`, then from `appVersion` and `appBuild` in config; use `Unknown` only if neither source is available.
 - Change report columns: `status`, `key`, language old/new pairs (`en old`, `en`, `es old`, `es`…), `author`.
 - Current report columns: `key`, language columns, `author`. No `warnings`, `screen`, `element`, or `meaning` columns.
 - `author` resolves: `GIT_AUTHOR_NAME` → `git config user.name` → last commit author → `Unknown`.
@@ -148,6 +149,8 @@ Do not use `NSLocalizedString`. Do not write `extension LocalizedStringResource`
   "defaultLanguage": "en",
   "languages": ["en", "es"],
   "defaultScreen": "common",
+  "appVersion": "",
+  "appBuild": "",
   "validElements": ["accessibility_hint","accessibility_label","alert","button",
     "context_menu","empty_state","error","label","link","message",
     "navigation_title","picker","placeholder","subtitle","success",

@@ -64,10 +64,14 @@ DEFAULT_SETTINGS = {
     "defaultLanguage": "en",
     "languages": ["en", "es"],
     "defaultScreen": "common",
+    "appVersion": "",
+    "appBuild": "",
     "validElements": sorted(DEFAULT_VALID_ELEMENTS),
     "keyPattern": "{screen}_{element}_{meaning}",
     "swiftApiName": "AppStrings",
 }
+REPORT_APP_VERSION = "Unknown"
+REPORT_APP_BUILD = "Unknown"
 
 SWIFT_KEYWORDS = {
     "associatedtype",
@@ -393,6 +397,11 @@ def report_author() -> str:
     if author:
         return author
     return "Unknown"
+
+
+def report_release_value(settings: dict, setting: str, environment: str) -> str:
+    value = os.environ.get(environment, "").strip() or str(settings.get(setting, "")).strip()
+    return value or "Unknown"
 
 
 def key_parts(key: str, settings: dict) -> tuple[str, str, str]:
@@ -756,6 +765,8 @@ def page_html(title: str, body: str) -> str:
         "<head>",
         '  <meta charset="utf-8">',
         '  <meta name="viewport" content="width=device-width, initial-scale=1">',
+        f'  <meta name="xcode-localizer-app-version" content="{html.escape(REPORT_APP_VERSION, quote=True)}">',
+        f'  <meta name="xcode-localizer-app-build" content="{html.escape(REPORT_APP_BUILD, quote=True)}">',
         f"  <title>{html.escape(title)}</title>",
         "  <style>",
         "    :root { color-scheme: light; --swift-orange: #f05138; --swift-orange-dark: #d84832; --ink: #1d1d1f; --muted: #5f5f67; --line: #e5e5ea; --surface: #ffffff; --surface-alt: #f5f5f7; --header: #2b2b31; }",
@@ -1044,6 +1055,20 @@ def report_author_from_html(filename: str) -> str:
     return author or "Unknown"
 
 
+def report_release_from_html(filename: str) -> tuple[str, str]:
+    path = REPORTS_DIR / filename
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return "Unknown", "Unknown"
+
+    def metadata(name: str) -> str:
+        match = re.search(rf'<meta name="{name}" content="([^"]*)">', content)
+        return html.unescape(match.group(1)).strip() if match else "Unknown"
+
+    return metadata("xcode-localizer-app-version"), metadata("xcode-localizer-app-build")
+
+
 def filename_sort_key(filename: str) -> tuple[int, int, int, str]:
     match = CHANGE_REPORT_RE.match(filename)
     if not match:
@@ -1068,8 +1093,11 @@ def history_rows(filenames: list[str]) -> list[list[str]]:
         label = filename.removesuffix(".html")
         escaped_label = html.escape(label)
         display_date, iso_date = display_datetime_from_filename(filename)
+        version, build = report_release_from_html(filename)
         rows.append([
             html.escape(display_date),
+            html.escape(version),
+            html.escape(build),
             html.escape(report_author_from_html(filename)),
             f'<a class="button button-review" href="{html.escape(filename)}" aria-label="Review {escaped_label}">↗ Review</a>',
             iso_date,
@@ -1082,7 +1110,7 @@ def render_html_table(header_cells: list[str], rows: list[list[str]]) -> str:
         return ' class="cell-action"' if index == len(header_cells) - 1 else ""
 
     table_rows = [
-        f'      <tr data-filter-row data-date="{html.escape(row[-1])}" data-author="{row[1].lower()}">'
+        f'      <tr data-filter-row data-date="{html.escape(row[-1])}" data-author="{row[3].lower()}">'
         + "".join(f"<td{cell_class(index)}>{cell}</td>" for index, cell in enumerate(row[:len(header_cells)]))
         + "</tr>"
         for row in rows
@@ -1117,7 +1145,7 @@ def render_history_report(generated_at: str) -> str:
         sections.append("  <p>No change reports yet.</p>")
     else:
         sections.append('  <p class="empty-filter" data-empty-filter-message hidden>No localization text was generated for that date or author.</p>')
-        sections.append(render_html_table(["date", "author", ""], history_rows(all_filenames)))
+        sections.append(render_html_table(["date", "version", "build", "author", ""], history_rows(all_filenames)))
     return page_html("History of changes", "\n".join(sections))
 
 
@@ -1132,6 +1160,9 @@ def unique_change_report_path(now: dt.datetime) -> Path:
 
 
 def write_html_report(catalog: dict, events: list[dict], author: str, settings: dict) -> list[Path]:
+    global REPORT_APP_VERSION, REPORT_APP_BUILD
+    REPORT_APP_VERSION = report_release_value(settings, "appVersion", "MARKETING_VERSION")
+    REPORT_APP_BUILD = report_release_value(settings, "appBuild", "CURRENT_PROJECT_VERSION")
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     now = dt.datetime.now()
     generated_at = now.strftime("%d-%m-%Y %H:%M:%S")
